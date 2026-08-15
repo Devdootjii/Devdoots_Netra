@@ -1,8 +1,9 @@
 import asyncio
+import os
 from telegram import Bot
 
-BOT_TOKEN = "8794032397:AAFxslHQEQ72ArMcg8fNTF-mPQGZrIFBHXs"
-CHAT_ID = "8350768886"
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "YOUR_CHAT_ID_HERE")
 
 async def send_test_message():
     bot = Bot(token=BOT_TOKEN)
