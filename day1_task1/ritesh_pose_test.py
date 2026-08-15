@@ -39,6 +39,7 @@ while cap.isOpened():
                 mp_hands.HAND_CONNECTIONS
             )
             
+            # Print hand landmarks coordinates
             wrist = hand_landmarks.landmark[0]
             index_tip = hand_landmarks.landmark[8]
             print(f"[NETRA TRACKER] Wrist: (x={wrist.x:.2f}, y={wrist.y:.2f}) | Index Tip: (x={index_tip.x:.2f}, y={index_tip.y:.2f})")
