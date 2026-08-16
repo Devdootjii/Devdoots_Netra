@@ -63,3 +63,34 @@ def camera_status():
         "resolution": "1080p",
         "last_ping": "few seconds ago"
     }
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Optional
+
+app = FastAPI(title="Project Netra Backend")
+
+# Existing CORS setup...
+origins = ["http://localhost:5173", "http://localhost:3000"]
+app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+# Naya Data Model: Continuous AI Frame Data ke liye
+class AIFrameData(BaseModel):
+    camera_id: str
+    threat_level: str
+    persons_detected: int
+    sos_active: bool
+    frame_timestamp: Optional[str] = None
+
+# Day 3 Integration Endpoint
+@app.post("/api/ai-stream")
+def receive_ai_stream(data: AIFrameData):
+    # Agar SOS detect hota hai, toh turant critical alert trigger karo
+    if data.sos_active or data.threat_level == "CRITICAL":
+        print(f"🚨 [CRITICAL ALERT] Camera: {data.camera_id} | Persons: {data.persons_detected} | SOS: {data.sos_active}")
+        # Aage chalkar yahan Khushi ka Cloud/Telegram function trigger hoga
+        return {"status": "CRITICAL_PROCESSED", "action": "Triggering Cloud Sync"}
+    
+    # Normal continuous tracking log (optional: comment out if console gets too noisy)
+    print(f"✅ [NORMAL] Camera: {data.camera_id} | Persons: {data.persons_detected}")
+    return {"status": "SUCCESS", "message": "Frame data received"}
