@@ -2,7 +2,34 @@ import { useState, useEffect, useRef } from 'react'
 
 function App() {
   const [isAlertActive, setIsAlertActive] = useState(false)
+  const [liveData, setLiveData] = useState(null)
   const intervalRef = useRef(null)
+
+  // 1. Divyansh se unki actual API URL lekar yahan badal dena
+  const API_URL = "http://127.0.0.1:8000/api/ai-stream"
+
+  // --- DAY 3: API POLLING LOGIC ---
+  useEffect(() => {
+    const apiInterval = setInterval(async () => {
+      try {
+        const response = await fetch(API_URL)
+        const data = await response.json()
+        setLiveData(data)
+
+        // Agar API se SOS true aata hai toh alert activate kar do
+        if (data.sos_active === true || data.threat_level === 'CRITICAL') {
+        setIsAlertActive(true);
+        } else {
+         setIsAlertActive(false);
+        }
+        }
+        catch (error) {
+        console.error("API connection error:", error)
+      }
+    }, 2000) // Har 2 second mein check karega
+
+    return () => clearInterval(apiInterval)
+  }, [])
 
   // Emergency Bell / Alert Sound generator
   const playAlertSound = () => {
@@ -125,9 +152,14 @@ function App() {
 
   return (
     <div className={`min-h-screen bg-gray-950 text-white transition-all duration-300 ${
-      isAlertActive ? 'border-4 border-red-500 animate-pulse' : 'border-4 border-transparent'
+      isAlertActive ? 'border-4 border-red-500 animate-pulse bg-red-950/20' : 'border-4 border-transparent'
     }`}>
       
+      {/* Red Light Overlay Flashing */}
+      {isAlertActive && (
+        <div className="fixed inset-0 bg-red-600/10 pointer-events-none animate-ping z-40" />
+      )}
+
       {/* Navbar */}
       <nav className="bg-gray-900/80 backdrop-blur-md border-b border-gray-800 px-6 py-4 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -164,7 +196,7 @@ function App() {
               <span className="text-xl">🚨</span>
               <div>
                 <p className="font-semibold">SOS Alert Detected!</p>
-                <p className="text-sm text-red-300">Emergency gesture detected. Notifying authorities...</p>
+                <p className="text-sm text-red-300">Emergency signal received from API. Notifying authorities...</p>
               </div>
             </div>
             <button 
@@ -187,20 +219,27 @@ function App() {
           </h1>
 
           {/* Subtitle */}
-          <p className="text-gray-400 text-lg md:text-xl max-w-2xl mx-auto mb-10">
+          <p className="text-gray-400 text-lg md:text-xl max-w-2xl mx-auto mb-6">
             Real-time threat detection & SOS alert system using AI vision and gesture recognition.
           </p>
 
-          <button 
-            onClick={() => setIsAlertActive(!isAlertActive)}
-            className={`px-6 py-3 rounded-lg font-medium text-sm transition ${
-              isAlertActive 
-                ? 'bg-red-600 hover:bg-red-500' 
-                : 'bg-blue-600 hover:bg-blue-500'
-            }`}
-          >
-            {isAlertActive ? 'Stop Alert' : 'Trigger SOS Alert'}
-          </button>
+          {/* Live API Feed Indicator */}
+          <div className="mb-8 inline-block bg-gray-900 border border-gray-800 px-4 py-2 rounded-lg text-xs font-mono text-gray-400">
+            API Status: {liveData ? <span className="text-green-400">Connected ({JSON.stringify(liveData)})</span> : <span className="text-yellow-400">Polling backend...</span>}
+          </div>
+
+          <div>
+            <button 
+              onClick={() => setIsAlertActive(!isAlertActive)}
+              className={`px-6 py-3 rounded-lg font-medium text-sm transition ${
+                isAlertActive 
+                  ? 'bg-red-600 hover:bg-red-500' 
+                  : 'bg-blue-600 hover:bg-blue-500'
+              }`}
+            >
+              {isAlertActive ? 'Stop Alert' : 'Trigger Manual SOS Test'}
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-20">
@@ -227,4 +266,4 @@ function App() {
   )
 }
 
-export default App 
+export default App
