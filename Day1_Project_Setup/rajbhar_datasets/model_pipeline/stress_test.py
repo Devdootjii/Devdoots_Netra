@@ -3,9 +3,9 @@ import time
 
 def run_stress_test():
     # Aapki abnormal video ka path (hand signal for help)
-    video_path = r"C:\Users\atulkumar\Downloads\sos_video.mp4.mp4"
+    video_path = 0
     
-    cap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
     if not cap.isOpened():
         print("Error: Video nahi khul rahi hai. Path check karein.")
         return
