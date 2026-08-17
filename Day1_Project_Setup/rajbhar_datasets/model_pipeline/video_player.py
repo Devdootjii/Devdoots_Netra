@@ -1,34 +1,35 @@
 import cv2
 
-# Yahan apni video ka pura rasta (path) daalein jahan abnormal video rakhi hai
-# Example: "C:/Users/atulkumar/OneDrive/Pictures/rajbhar_datasets/Devdoots_Netra/Day2_Project_Setup/rajbhar_videos/abnormal_videos/video1.mp4"
-video_path = r"C:\Users\atulkumar\Downloads\sos_video.mp4.mp4"
-
-# Video ko read karna
-cap = cv2.VideoCapture(video_path)
-
-if not cap.isOpened():
-    print(f"Error: Video '{video_path}' nahi khul rahi hai. Kripya file ka naam aur rasta check karein.")
-else:
-    print("Video start ho gayi hai. Playback band karne ke liye 'q' dabayein.")
-
-# Frame-by-frame play karna
-while cap.isOpened():
-    ret, frame = cap.read()
+def get_abnormal_video_feed():
+    """
+    Yeh function Balram aur Ritesh ke scripts ko webcam ki jagah
+    abnormal video ka feed dega.
+    """
+    # Aapka sahi video path (Downloads wala)
+    video_path = r"C:\Users\atulkumar\Downloads\sos_video.mp4.mp4"
     
-    # Agar frames khatam ho jayein toh loop rok do
-    if not ret:
-        print("Video poori khatam ho gayi.")
-        break
+    cap = cv2.VideoCapture(video_path)
+    
+    if not cap.isOpened():
+        print(f"Error: Video '{video_path}' nahi khul rahi hai.")
+        return None
         
-    # Frame ko screen par display karna
-    cv2.imshow('Model Feed Pipeline - Frame by Frame', frame)
-    
-    # 25ms ka delay, aur 'q' dabane par window band ho jayegi
-    if cv2.waitKey(25) & 0xFF == ord('q'):
-        print("User ne video band kar di.")
-        break
+    print("Video pipeline ready hai! Sending feed to YOLO/MediaPipe...")
+    return cap
 
-# Memory aur windows clear karna
-cap.release()
-cv2.destroyAllWindows()
+# Yeh hissa sirf tab chalega jab aap is file ko khud test karenge
+if __name__ == "__main__":
+    test_cap = get_abnormal_video_feed()
+    if test_cap:
+        while test_cap.isOpened():
+            ret, frame = test_cap.read()
+            if not ret:
+                print("Video khatam.")
+                break
+            
+            cv2.imshow('Testing Feed for Integration', frame)
+            if cv2.waitKey(25) & 0xFF == ord('q'):
+                break
+                
+        test_cap.release()
+        cv2.destroyAllWindows()
