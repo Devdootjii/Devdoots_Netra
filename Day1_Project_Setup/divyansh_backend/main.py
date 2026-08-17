@@ -64,6 +64,7 @@ def camera_status():
         "last_ping": "few seconds ago"
     }
 import time
+from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -81,27 +82,39 @@ class AIFrameData(BaseModel):
     sos_active: bool
     frame_timestamp: Optional[str] = None
 
+# Day 4 Task 2: Logging Function
+def log_alert_metric(camera_id: str, latency_ms: float):
+    log_filename = "alert_latency_log.txt"
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_entry = f"[{current_time}] Camera: {camera_id} | Total Processing Latency: {latency_ms:.2f} ms\n"
+    
+    with open(log_filename, "a") as log_file:
+        log_file.write(log_entry)
+
 @app.post("/api/ai-stream")
 def receive_ai_stream(data: AIFrameData):
-    start_time = time.time() # Latency check start
+    start_time = time.time()
     try:
         if data.sos_active or data.threat_level == "CRITICAL":
             print(f"🚨 [CRITICAL ALERT] Camera: {data.camera_id} | SOS Active")
-            # Yahan Khushi ke cloud function ka trigger aayega
             
-            # Latency calculate karna (in milliseconds)
+            # Latency calculate karna
             latency_ms = (time.time() - start_time) * 1000
-            print(f"⚡ System Latency: {latency_ms:.2f} ms")
+            
+            # Log file mein data record karna
+            log_alert_metric(data.camera_id, latency_ms)
+            
+            print(f"⚡ System Latency & Logged: {latency_ms:.2f} ms")
             
             return {
                 "status": "CRITICAL_PROCESSED", 
-                "action": "Triggering Cloud & UI Sync",
+                "action": "Cloud & UI Sync Triggered",
                 "latency_ms": latency_ms
             }
         
         print(f"✅ [NORMAL] Camera: {data.camera_id} | Persons: {data.persons_detected}")
         return {"status": "SUCCESS", "message": "Frame data received"}
 
-    except Exception as e:
-        print(f"❌ [SYSTEM ERROR] {str(e)}")
+    except Exception as er:
+        print(f"❌ [SYSTEM ERROR] {str(er)}")
         raise HTTPException(status_code=400, detail="Bad Request: Data processing failed.")
