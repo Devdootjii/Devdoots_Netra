@@ -63,6 +63,7 @@ def camera_status():
         "resolution": "1080p",
         "last_ping": "few seconds ago"
     }
+import time
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -80,19 +81,27 @@ class AIFrameData(BaseModel):
     sos_active: bool
     frame_timestamp: Optional[str] = None
 
-# Day 3 Integration Endpoint with Error Handling
 @app.post("/api/ai-stream")
 def receive_ai_stream(data: AIFrameData):
+    start_time = time.time() # Latency check start
     try:
-        # Core Logic
         if data.sos_active or data.threat_level == "CRITICAL":
-            print(f"🚨 [CRITICAL ALERT] Camera: {data.camera_id} | Persons: {data.persons_detected} | SOS: {data.sos_active}")
-            return {"status": "CRITICAL_PROCESSED", "action": "Triggering Cloud Sync"}
+            print(f"🚨 [CRITICAL ALERT] Camera: {data.camera_id} | SOS Active")
+            # Yahan Khushi ke cloud function ka trigger aayega
+            
+            # Latency calculate karna (in milliseconds)
+            latency_ms = (time.time() - start_time) * 1000
+            print(f"⚡ System Latency: {latency_ms:.2f} ms")
+            
+            return {
+                "status": "CRITICAL_PROCESSED", 
+                "action": "Triggering Cloud & UI Sync",
+                "latency_ms": latency_ms
+            }
         
         print(f"✅ [NORMAL] Camera: {data.camera_id} | Persons: {data.persons_detected}")
         return {"status": "SUCCESS", "message": "Frame data received"}
 
     except Exception as e:
-        # Agar processing ke time koi unexpected error aaye toh server crash hone se bachao
-        print(f"❌ [SYSTEM ERROR] Backend ne crash handle kar liya: {str(e)}")
+        print(f"❌ [SYSTEM ERROR] {str(e)}")
         raise HTTPException(status_code=400, detail="Bad Request: Data processing failed.")
