@@ -1,6 +1,5 @@
 import os
 import asyncio
-from datetime import datetime
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -8,28 +7,13 @@ from telegram import Bot
 
 SCOPES = ['https://www.googleapis.com/auth/drive']
 
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "YOUR_CHAT_ID_HERE")
-CREDS_FILE = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "credentials.json")
-LOG_FILE = os.path.join(os.path.dirname(__file__), "error_log.txt")
-
-def log_error(module_name, error_message):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_entry = f"[{timestamp}] [{module_name}] {error_message}\n"
-    try:
-        with open(LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(log_entry)
-        print(f"[Logged Error] {log_entry.strip()}")
-    except Exception as e:
-        print(f"Critical Logging Failure: {e}")
+BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+CHAT_ID = "YOUR_CHAT_ID_HERE"
+CREDS_FILE = "credentials.json"
 
 def upload_to_drive(image_path):
     if not os.path.exists(CREDS_FILE):
-        log_error("Google Drive", f"Credentials file not found at: {CREDS_FILE}")
-        return None
-
-    if not os.path.exists(image_path):
-        log_error("Google Drive", f"Image file not found at: {image_path}")
+        print(f"Error: {CREDS_FILE} not found.")
         return None
 
     try:
@@ -49,19 +33,17 @@ def upload_to_drive(image_path):
         service.permissions().create(fileId=uploaded_file.get('id'), body=permission).execute()
 
         public_url = uploaded_file.get('webViewLink')
-        print(f"[Drive] Upload Success: {public_url}")
+        print(f"Upload Successful! Public URL: {public_url}")
         return public_url
 
     except Exception as e:
-        log_error("Google Drive", f"Drive upload failed: {str(e)}")
+        print(f"Failed to upload to Drive: {e}")
         return None
 
 async def send_critical_alert(image_path, location="Camera Location 1"):
-    print(f"\n[Alert Triggered] Processing threat alert for: {location}")
-    
     image_url = upload_to_drive(image_path)
     if not image_url:
-        image_url = "[Evidence Upload Failed - Logged to error_log.txt]"
+        image_url = "Image upload failed"
 
     alert_message = (
         f"🚨 CRITICAL SOS ALERT 🚨\n"
@@ -70,16 +52,19 @@ async def send_critical_alert(image_path, location="Camera Location 1"):
         f"⚠️ Immediate action required!"
     )
 
-    if BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
-        log_error("Telegram Alert", "Bot token not configured in environment.")
-        return
-
     try:
         bot = Bot(token=BOT_TOKEN)
         await bot.send_message(chat_id=CHAT_ID, text=alert_message)
-        print("[Telegram] Alert sent successfully!")
+        print("Telegram alert sent successfully!")
     except Exception as e:
-        log_error("Telegram Alert", f"Telegram alert delivery failed: {str(e)}")
+        print(f"Failed to send Telegram alert: {e}")
 
 if __name__ == "__main__":
-    print("Project Netra - Integration Module Ready.")
+    print("Cloud & Telegram Alert Integration Script Ready.")
+  
+
+
+       
+
+ 
+
