@@ -9,13 +9,12 @@ function App() {
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString());
 
   // Processing state for alert handling
-  
   const processingTimeoutRef = useRef(null);
 
   // Page Navigation State
   const [activePage, setActivePage] = useState('dashboard');
 
-  // --- 🚨 ALERTS PAGE INTERACTIVE STATES ---
+  // ALERTS PAGE INTERACTIVE STATES
   const [alertFilter, setAlertFilter] = useState('ALL');
   const [alertLogs, setAlertLogs] = useState([
     {
@@ -38,12 +37,12 @@ function App() {
     }
   ]);
 
-  // --- ⚙️ SETTINGS PAGE INTERACTIVE STATES ---
+  // SETTINGS PAGE INTERACTIVE STATES
   const [confidence, setConfidence] = useState(75);
   const [telegramEnabled, setTelegramEnabled] = useState(true);
   const [saveToast, setSaveToast] = useState(false);
 
-  // --- ⚡ INSTANT ALERTS / WEBHOOK INTERACTIVE STATES ---
+  // INSTANT ALERTS / WEBHOOK INTERACTIVE STATES
   const [botToken, setBotToken] = useState('123456789:ABCdefGHIjklMNOpqrsTUVwxyz');
   const [chatId, setChatId] = useState('-100987654321');
   const [testStatus, setTestStatus] = useState(null);
@@ -57,7 +56,7 @@ function App() {
     }
 
     processingTimeoutRef.current = setTimeout(() => {
-      
+      setIsProcessing(false);
     }, duration);
   };
 
@@ -70,7 +69,7 @@ function App() {
     };
   }, []);
 
-  // Real-time Clock ⏰
+  // Real-time Clock
   useEffect(() => {
     const timer = setInterval(
       () => setCurrentTime(new Date().toLocaleTimeString()),
@@ -80,10 +79,9 @@ function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // API Polling Logic 🔄
+  // API Polling Logic
   useEffect(() => {
     const apiInterval = setInterval(async () => {
-      
       try {
         const response = await fetch(API_URL);
         const data = await response.json();
@@ -95,7 +93,8 @@ function App() {
           data.threat_level === 'CRITICAL';
 
         setIsAlertActive(alertDetected);
-        setIsProcessing(false)
+        setIsProcessing(false);
+
         // Show processing indicator only when an alert is detected
         if (alertDetected) {
           showProcessing(1800);
@@ -109,7 +108,7 @@ function App() {
     return () => clearInterval(apiInterval);
   }, []);
 
-  // Emergency Sound Generator 🔊
+  // Emergency Sound Generator
   const playAlertSound = () => {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const osc = audioCtx.createOscillator();
@@ -152,7 +151,7 @@ function App() {
     }
   }, [isAlertActive]);
 
-  // Handler: Add Simulated Alert ➕
+  // Handler: Add Simulated Alert
   const handleSimulateAlert = () => {
     showProcessing(1800);
 
@@ -166,14 +165,14 @@ function App() {
     setAlertLogs(prev => [newLog, ...prev]);
   };
 
-  // Handler: Save Settings 💾
+  // Handler: Save Settings
   const handleSaveSettings = () => {
     setSaveToast(true);
 
     setTimeout(() => setSaveToast(false), 2500);
   };
 
-  // Handler: Send Test Telegram Message 📲
+  // Handler: Send Test Telegram Message
   const handleSendTestMessage = () => {
     setTestStatus('SENDING');
     showProcessing(1200);
@@ -185,22 +184,128 @@ function App() {
     }, 1200);
   };
 
-  // Filtered Alert Logs Calculation 🔍
+  // Filtered Alert Logs Calculation
   const filteredLogs = alertLogs.filter(log => {
     if (alertFilter === 'ALL') return true;
 
     return log.type === alertFilter;
   });
 
+  // Welcome text
+  const welcomeText = "Welcome to Netra";
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans relative overflow-x-hidden selection:bg-cyan-500 selection:text-black">
 
-      {/* RED ALERT FLASHING OVERLAY 🚨 */}
+      {/* Custom animations */}
+      <style>{`
+        /* NETRA corner logo */
+        .netra-logo {
+          display: inline-flex;
+          align-items: baseline;
+          transform: perspective(180px) rotateY(-8deg) rotateZ(-1deg);
+          transform-origin: left center;
+          letter-spacing: 0.12em;
+          text-shadow: 0 2px 12px rgba(6, 182, 212, 0.18);
+        }
+
+        /* Welcome gradient - FIXED VISIBILITY */
+        .welcome-gradient {
+          background: linear-gradient(
+            90deg,
+            #22d3ee 0%,
+            #7dd3fc 35%,
+            #818cf8 65%,
+            #22d3ee 100%
+          );
+          background-size: 200% auto;
+          -webkit-background-clip: text;
+          background-clip: text;
+          -webkit-text-fill-color: transparent;
+          color: transparent;
+        }
+
+        /* FIXED: Gradient applied to every letter so text stays visible */
+        .welcome-letter {
+          display: inline-block;
+          position: relative;
+
+          background: linear-gradient(
+            90deg,
+            #22d3ee 0%,
+            #7dd3fc 35%,
+            #818cf8 65%,
+            #22d3ee 100%
+          );
+
+          background-size: 200% auto;
+          background-clip: text;
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          color: transparent;
+
+          transition:
+            transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+            filter 0.25s ease;
+
+          will-change: transform;
+        }
+
+        /* Main hovered letter */
+        .welcome-letter:hover {
+          transform: translateY(-14px) rotate(-3deg) scale(1.08);
+        }
+
+        /* Nearby letters automatically lift */
+        .welcome-letter:hover + .welcome-letter {
+          transform: translateY(-8px) rotate(2deg) scale(1.04);
+        }
+
+        .welcome-letter:has(+ .welcome-letter:hover) {
+          transform: translateY(-8px) rotate(-2deg) scale(1.04);
+        }
+
+        /* Second-nearest letters */
+        .welcome-letter:has(+ .welcome-letter + .welcome-letter:hover) {
+          transform: translateY(-4px) rotate(1deg);
+        }
+
+        .welcome-letter:hover + .welcome-letter + .welcome-letter {
+          transform: translateY(-4px) rotate(-1deg);
+        }
+
+        /* Remove blur/glow */
+        .welcome-title {
+          filter: none;
+          text-shadow: none;
+        }
+
+        /* Premium Back Button */
+        .back-dashboard-btn {
+          position: relative;
+          overflow: hidden;
+          transition:
+            transform 0.25s ease,
+            border-color 0.25s ease,
+            background 0.25s ease,
+            box-shadow 0.25s ease;
+        }
+
+        .back-dashboard-btn:hover {
+          transform: translateY(-2px);
+        }
+
+        .back-dashboard-btn:active {
+          transform: translateY(0);
+        }
+      `}</style>
+
+      {/* RED ALERT FLASHING OVERLAY */}
       {isAlertActive && (
         <div className="fixed inset-0 bg-red-600/20 pointer-events-none animate-pulse z-50 border-8 border-red-600" />
       )}
 
-      {/* HEADER / NAVIGATION BAR 🧭 */}
+      {/* HEADER / NAVIGATION BAR */}
       <header className="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md sticky top-0 z-40 px-6 py-3.5 flex items-center justify-between">
 
         <div
@@ -211,7 +316,7 @@ function App() {
           <div className="relative flex items-center justify-center">
 
             <img
-              src="/logo.png"
+              src="\Screenshot 2026-08-18 154958.png"
               alt="Netra Logo"
               className="w-9 h-9 rounded-full border border-cyan-500/40 object-cover shadow-sm shadow-cyan-500/20"
               onError={(e) => {
@@ -221,60 +326,77 @@ function App() {
 
           </div>
 
+          {/* NETRA LOGO - N and A bigger */}
           <div>
-            <h1 className="text-xl font-black tracking-wider text-cyan-400 font-mono">
-              NETRA
+            <h1 className="font-black font-mono netra-logo text-cyan-400">
+
+              <span className="text-2xl tracking-wide">
+                N
+              </span>
+
+              <span className="text-xl">
+                ETR
+              </span>
+
+              <span className="text-2xl tracking-wide">
+                A
+              </span>
+
             </h1>
           </div>
 
         </div>
 
-        {/* FULL PAGE NAVIGATION BUTTONS 🔀 */}
+        {/* FULL PAGE NAVIGATION BUTTONS */}
         <nav className="hidden md:flex items-center gap-1 bg-slate-950/60 p-1 rounded-lg border border-slate-800/60 text-xs font-medium text-slate-400">
 
           <button
             onClick={() => setActivePage('dashboard')}
-            className={`px-3.5 py-1.5 rounded-md transition-all ${activePage === 'dashboard'
+            className={`px-3.5 py-1.5 rounded-md transition-all ${
+              activePage === 'dashboard'
                 ? 'text-white bg-slate-800/80 border border-slate-700/50 shadow-sm'
                 : 'hover:text-slate-100 hover:bg-slate-800/50 border border-transparent'
-              }`}
+            }`}
           >
             Dashboard
           </button>
 
           <button
             onClick={() => setActivePage('alerts')}
-            className={`px-3.5 py-1.5 rounded-md transition-all ${activePage === 'alerts'
+            className={`px-3.5 py-1.5 rounded-md transition-all ${
+              activePage === 'alerts'
                 ? 'text-white bg-slate-800/80 border border-slate-700/50 shadow-sm'
                 : 'hover:text-slate-100 hover:bg-slate-800/50 border border-transparent'
-              }`}
+            }`}
           >
             Alerts
           </button>
 
           <button
             onClick={() => setActivePage('livefeed')}
-            className={`px-3.5 py-1.5 rounded-md transition-all ${activePage === 'livefeed'
+            className={`px-3.5 py-1.5 rounded-md transition-all ${
+              activePage === 'livefeed'
                 ? 'text-white bg-slate-800/80 border border-slate-700/50 shadow-sm'
                 : 'hover:text-slate-100 hover:bg-slate-800/50 border border-transparent'
-              }`}
+            }`}
           >
             Live Feed
           </button>
 
           <button
             onClick={() => setActivePage('settings')}
-            className={`px-3.5 py-1.5 rounded-md transition-all ${activePage === 'settings'
+            className={`px-3.5 py-1.5 rounded-md transition-all ${
+              activePage === 'settings'
                 ? 'text-white bg-slate-800/80 border border-slate-700/50 shadow-sm'
                 : 'hover:text-slate-100 hover:bg-slate-800/50 border border-transparent'
-              }`}
+            }`}
           >
             Settings
           </button>
 
         </nav>
 
-        {/* System Online Indicator 🟢 */}
+        {/* System Online Indicator */}
         <div className="flex items-center gap-4">
 
           <div className="hidden sm:block text-right font-mono text-xs text-slate-400">
@@ -314,7 +436,7 @@ function App() {
 
       </header>
 
-      {/* MAIN CONTAINER 📄 */}
+      {/* MAIN CONTAINER */}
       <main className="max-w-7xl mx-auto px-6 py-10">
 
         {/* PROCESSING BANNER */}
@@ -341,15 +463,11 @@ function App() {
           </div>
         )}
 
-        {/* EMERGENCY BANNER 🚨 */}
+        {/* EMERGENCY BANNER */}
         {isAlertActive && (
           <div className="mb-8 p-4 bg-red-950/60 border border-red-600/50 rounded-xl flex items-center justify-between shadow-lg shadow-red-950/50">
 
             <div className="flex items-center gap-3">
-
-              <span className="text-2xl animate-bounce">
-                🚨
-              </span>
 
               <div>
 
@@ -378,7 +496,7 @@ function App() {
           </div>
         )}
 
-        {/* PAGE 1: MAIN DASHBOARD 💻 */}
+        {/* PAGE 1: MAIN DASHBOARD */}
         {activePage === 'dashboard' && (
           <div>
 
@@ -392,13 +510,19 @@ function App() {
 
               </div>
 
-              <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-white mb-6">
+              {/* WELCOME TO NETRA - FIXED VISIBILITY */}
+              <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight mb-6 welcome-title">
 
-                Welcome to{" "}
-
-                <span className="inline-block animate-pulse bg-gradient-to-r from-cyan-400 via-sky-300 via-indigo-400 to-cyan-400 bg-300% bg-clip-text text-transparent">
-                  Netra 👋
-                </span>
+                {welcomeText.split('').map((letter, index) => (
+                  <span
+                    key={index}
+                    className={`welcome-letter ${
+                      letter === ' ' ? 'mr-2' : ''
+                    }`}
+                  >
+                    {letter === ' ' ? '\u00A0' : letter}
+                  </span>
+                ))}
 
               </h1>
 
@@ -406,32 +530,39 @@ function App() {
                 Real-time threat detection & SOS alert system using AI vision and gesture recognition.
               </p>
 
-              {/* API STATUS 🔌 */}
+              {/* API STATUS */}
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900/80 border border-slate-800 rounded-lg font-mono text-xs mb-8">
 
                 <span className="text-slate-400">
                   API Status:
                 </span>
+
                 {isProcessing ? (
+
                   <span className="text-amber-400 font-semibold flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
                     Processing...
                   </span>
+
                 ) : liveData ? (
+
                   <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                     Connected
                   </span>
+
                 ) : (
+
                   <span className="text-amber-400 font-semibold flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
                     Polling backend...
                   </span>
+
                 )}
 
               </div>
 
-              {/* Real-time Persons Count Display 👥 */}
+              {/* Real-time Persons Count Display */}
               <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-xl text-center mb-4 max-w-xs mx-auto shadow-lg">
 
                 <div className="text-slate-400 text-xs font-mono uppercase mb-1">
@@ -458,10 +589,11 @@ function App() {
                       setIsProcessing(false);
                     }
                   }}
-                  className={`px-6 py-3 rounded-xl font-medium text-sm transition-all duration-200 shadow-lg ${isAlertActive
+                  className={`px-6 py-3 rounded-xl font-medium text-sm transition-all duration-200 shadow-lg ${
+                    isAlertActive
                       ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-900/50'
                       : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold shadow-cyan-500/20'
-                    }`}
+                  }`}
                 >
                   {isAlertActive
                     ? 'Reset Emergency Alert'
@@ -472,19 +604,20 @@ function App() {
 
             </div>
 
-            {/* CARDS GRID 🃏 */}
+            {/* CARDS GRID */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-16">
 
+              {/* CARD 1 */}
               <div
                 onClick={() => setActivePage('yolo_detail')}
-                className="bg-slate-900/40 border border-slate-800/80 p-6 rounded-2xl hover:border-cyan-500/50 hover:bg-slate-900/80 transition-all duration-300 transform hover:-translate-y-2 cursor-pointer group"
+                className="bg-slate-900/40 border border-slate-800/80 p-6 rounded-2xl hover:border-cyan-500/50 hover:bg-slate-900/80 hover:shadow-[0_0_35px_rgba(6,182,212,0.18)] transition-all duration-300 transform hover:-translate-y-2 cursor-pointer group"
               >
 
-                <div className="w-10 h-10 rounded-xl bg-cyan-950/60 border border-cyan-800/40 flex items-center justify-center text-cyan-400 text-xl mb-4 group-hover:scale-110 transition-transform">
-                  📷
+                <div className="w-10 h-10 rounded-xl bg-cyan-950/60 border border-cyan-800/40 flex items-center justify-center text-cyan-400 text-xl mb-4 group-hover:scale-125 transition-transform">
+                  Camera
                 </div>
 
-                <h3 className="font-semibold text-white text-base mb-2">
+                <h3 className="font-semibold text-white text-base mb-2 text-center">
                   Real-time Detection
                 </h3>
 
@@ -498,16 +631,17 @@ function App() {
 
               </div>
 
+              {/* CARD 2 */}
               <div
                 onClick={() => setActivePage('gesture_detail')}
-                className="bg-slate-900/40 border border-slate-800/80 p-6 rounded-2xl hover:border-indigo-500/50 hover:bg-slate-900/80 transition-all duration-300 transform hover:-translate-y-2 cursor-pointer group"
+                className="bg-slate-900/40 border border-slate-800/80 p-6 rounded-2xl hover:border-indigo-500/50 hover:bg-slate-900/80 hover:shadow-[0_0_35px_rgba(99,102,241,0.18)] transition-all duration-300 transform hover:-translate-y-2 cursor-pointer group"
               >
 
-                <div className="w-10 h-10 rounded-xl bg-indigo-950/60 border border-indigo-800/40 flex items-center justify-center text-indigo-400 text-xl mb-4 group-hover:scale-110 transition-transform">
-                  ✋
+                <div className="w-10 h-10 rounded-xl bg-indigo-950/60 border border-indigo-800/40 flex items-center justify-center text-indigo-400 text-xl mb-4 group-hover:scale-125 transition-transform">
+                  Gesture
                 </div>
 
-                <h3 className="font-semibold text-white text-base mb-2">
+                <h3 className="font-semibold text-white text-base mb-2 text-center">
                   SOS Gesture Tracking
                 </h3>
 
@@ -521,16 +655,17 @@ function App() {
 
               </div>
 
+              {/* CARD 3 */}
               <div
                 onClick={() => setActivePage('alerts_detail')}
-                className="bg-slate-900/40 border border-slate-800/80 p-6 rounded-2xl hover:border-emerald-500/50 hover:bg-slate-900/80 transition-all duration-300 transform hover:-translate-y-2 cursor-pointer group"
+                className="bg-slate-900/40 border border-slate-800/80 p-6 rounded-2xl hover:border-emerald-500/50 hover:bg-slate-900/80 hover:shadow-[0_0_35px_rgba(16,185,129,0.18)] transition-all duration-300 transform hover:-translate-y-2 cursor-pointer group"
               >
 
                 <div className="w-10 h-10 rounded-xl bg-emerald-950/60 border border-emerald-800/40 flex items-center justify-center text-emerald-400 text-xl mb-4 group-hover:scale-110 transition-transform">
-                  ⚡
+                  Alerts
                 </div>
 
-                <h3 className="font-semibold text-white text-base mb-2">
+                <h3 className="font-semibold text-white text-base mb-2 text-center">
                   Instant Alerts
                 </h3>
 
@@ -549,87 +684,96 @@ function App() {
           </div>
         )}
 
-        {/* PAGE 2: INTERACTIVE ALERTS PAGE 🚨 */}
+        {/* PAGE 2: INTERACTIVE ALERTS PAGE */}
         {activePage === 'alerts' && (
           <div className="space-y-6">
 
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            {/* FIXED: ALERT HEADING CENTERED */}
+            <div className="flex flex-col items-center justify-center text-center gap-4">
 
-              <div>
-
-                <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                  🚨 System Threat & Emergency Logs
+              <div className="w-full text-center">
+                <h2 className="text-2xl font-bold text-white flex items-center justify-center gap-2 text-center">
+                  System Threat & Emergency Logs
                 </h2>
 
-                <p className="text-slate-400 text-xs">
+                <p className="text-slate-400 text-xs text-center mt-1">
                   Real-time alert logs with interactive controls and filtering.
                 </p>
-
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center gap-2">
 
                 <button
                   onClick={handleSimulateAlert}
                   className="px-3.5 py-1.5 bg-cyan-950 hover:bg-cyan-900 border border-cyan-800 text-cyan-300 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5"
                 >
-                  ➕ Simulate Alert
+                  Simulate Alert
                 </button>
 
                 <button
                   onClick={() => setAlertLogs([])}
                   className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-400 hover:text-slate-200 rounded-lg text-xs font-mono transition-all"
                 >
-                  🗑️ Clear Logs
+                  Clear Logs
                 </button>
 
               </div>
 
             </div>
 
-            {/* Filter Tabs 🔍 */}
-            <div className="flex items-center gap-2 border-b border-slate-800 pb-3 text-xs font-mono">
+            {/* Filter Tabs */}
+            <div className="flex items-center justify-center gap-2 border-b border-slate-800 pb-3 text-xs font-mono">
 
               <span className="text-slate-500 mr-2">
                 Filter:
               </span>
 
               {['ALL', 'CRITICAL', 'WARNING'].map(filter => (
+
                 <button
                   key={filter}
                   onClick={() => setAlertFilter(filter)}
-                  className={`px-3 py-1 rounded-md transition-all ${alertFilter === filter
+                  className={`px-3 py-1 rounded-md transition-all ${
+                    alertFilter === filter
                       ? 'bg-slate-800 text-cyan-400 border border-cyan-500/30'
                       : 'text-slate-400 hover:text-white'
-                    }`}
+                  }`}
                 >
+
                   {filter} (
                   {filter === 'ALL'
                     ? alertLogs.length
                     : alertLogs.filter(l => l.type === filter).length}
                   )
+
                 </button>
+
               ))}
 
             </div>
 
-            {/* Dynamic Logs List 📋 */}
+            {/* Dynamic Logs List */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 font-mono text-xs space-y-3 min-h-[250px]">
 
               {filteredLogs.length === 0 ? (
+
                 <div className="text-center py-12 text-slate-500">
                   No logs available for current filter category.
                 </div>
+
               ) : (
+
                 filteredLogs.map(log => (
+
                   <div
                     key={log.id}
-                    className={`p-3.5 border rounded-xl flex justify-between items-center transition-all ${log.type === 'CRITICAL'
+                    className={`p-3.5 border rounded-xl flex justify-between items-center transition-all ${
+                      log.type === 'CRITICAL'
                         ? 'bg-red-950/40 border-red-800/50 text-red-300'
                         : log.type === 'WARNING'
                           ? 'bg-amber-950/40 border-amber-800/50 text-amber-300'
                           : 'bg-slate-950 border-slate-800 text-slate-400'
-                      }`}
+                    }`}
                   >
 
                     <div className="flex items-center gap-2.5">
@@ -649,7 +793,9 @@ function App() {
                     </span>
 
                   </div>
+
                 ))
+
               )}
 
             </div>
@@ -657,25 +803,25 @@ function App() {
           </div>
         )}
 
-        {/* PAGE 3: FULL LIVE FEED PAGE 📹 */}
+        {/* PAGE 3: FULL LIVE FEED PAGE */}
         {activePage === 'livefeed' && (
           <div className="space-y-6">
 
-            <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-              📹 Live Vision Stream
+            <h2 className="text-2xl font-bold text-white flex items-center justify-center gap-2 text-center">
+              Live Vision Stream
             </h2>
 
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 aspect-video flex flex-col items-center justify-center text-center">
 
               <div className="w-16 h-16 rounded-full bg-cyan-950/80 border border-cyan-800 flex items-center justify-center text-3xl mb-4 animate-pulse">
-                🎥
+                Camera
               </div>
 
-              <h3 className="text-white font-bold text-base mb-1">
+              <h3 className="text-white font-bold text-base mb-1 text-center">
                 Live Camera Feed Standby
               </h3>
 
-              <p className="text-slate-400 text-xs max-w-sm">
+              <p className="text-slate-400 text-xs max-w-sm text-center">
                 Connect your Python backend OpenCV/YOLO video stream to display live frames here.
               </p>
 
@@ -684,35 +830,37 @@ function App() {
           </div>
         )}
 
-        {/* PAGE 4: INTERACTIVE SETTINGS PAGE ⚙️ */}
+        {/* PAGE 4: INTERACTIVE SETTINGS PAGE */}
         {activePage === 'settings' && (
-          <div className="space-y-6 max-w-2xl">
+          <div className="space-y-6 max-w-2xl mx-auto">
 
             <div className="flex items-center justify-between">
 
-              <div>
+              <div className="w-full">
 
-                <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                  ⚙️ System Configuration
+                <h2 className="text-2xl font-bold text-white flex items-center justify-center gap-2 text-center">
+                  System Configuration
                 </h2>
 
-                <p className="text-slate-400 text-xs">
+                <p className="text-slate-400 text-xs text-center">
                   Adjust AI thresholds and notification preferences.
                 </p>
 
               </div>
 
               {saveToast && (
+
                 <span className="text-xs bg-emerald-950 border border-emerald-700 text-emerald-400 px-3 py-1 rounded-lg animate-fade-in">
-                  ✓ Settings Saved!
+                  Settings Saved!
                 </span>
+
               )}
 
             </div>
 
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 text-xs">
 
-              {/* Interactive Slider Control 🎛️ */}
+              {/* Interactive Slider Control */}
               <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
 
                 <div className="flex justify-between items-center">
@@ -746,7 +894,7 @@ function App() {
 
               </div>
 
-              {/* Interactive Toggle Switch 🎚️ */}
+              {/* Interactive Toggle Switch */}
               <div className="flex justify-between items-center p-4 bg-slate-950 rounded-xl border border-slate-800">
 
                 <div>
@@ -763,12 +911,15 @@ function App() {
 
                 <button
                   onClick={() => setTelegramEnabled(!telegramEnabled)}
-                  className={`w-12 h-6 flex items-center rounded-full p-1 transition-all duration-300 ${telegramEnabled
+                  className={`w-12 h-6 flex items-center rounded-full p-1 transition-all duration-300 ${
+                    telegramEnabled
                       ? 'bg-emerald-600 justify-end'
                       : 'bg-slate-800 justify-start'
-                    }`}
+                  }`}
                 >
+
                   <span className="w-4 h-4 rounded-full bg-white shadow-md"></span>
+
                 </button>
 
               </div>
@@ -789,26 +940,19 @@ function App() {
           </div>
         )}
 
-        {/* CARD 1 DETAIL PAGE: YOLO DETECTION WORKSPACE 📷 */}
+        {/* CARD 1 DETAIL PAGE: YOLO DETECTION WORKSPACE */}
         {activePage === 'yolo_detail' && (
-          <div className="space-y-6">
+          <div className="space-y-6 relative min-h-[520px] pb-20">
 
-            <button
-              onClick={() => setActivePage('dashboard')}
-              className="text-xs font-mono text-cyan-400 hover:underline"
-            >
-              ← Back to Dashboard
-            </button>
-
-            <h2 className="text-2xl font-bold text-white">
-              📷 YOLO Real-Time Detection Model
+            <h2 className="text-2xl font-bold text-white text-center">
+              YOLO Real-Time Detection Model
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
               <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
 
-                <h3 className="text-sm font-bold text-cyan-400 mb-2">
+                <h3 className="text-sm font-bold text-cyan-400 mb-2 text-center">
                   Model Specifications
                 </h3>
 
@@ -822,11 +966,11 @@ function App() {
 
               <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
 
-                <h3 className="text-sm font-bold text-emerald-400 mb-2">
+                <h3 className="text-sm font-bold text-emerald-400 mb-2 text-center">
                   Pipeline Status
                 </h3>
 
-                <div className="text-xs text-slate-300 font-mono">
+                <div className="text-xs text-slate-300 font-mono text-center">
                   Video capture active on webcam device index 0.
                 </div>
 
@@ -834,65 +978,67 @@ function App() {
 
             </div>
 
-          </div>
-        )}
-
-        {/* CARD 2 DETAIL PAGE: MEDIAPIPE GESTURE TRACKER ✋ */}
-        {activePage === 'gesture_detail' && (
-          <div className="space-y-6">
-
+            {/* Improved Back Button */}
             <button
               onClick={() => setActivePage('dashboard')}
-              className="text-xs font-mono text-indigo-400 hover:underline"
+              className="back-dashboard-btn absolute bottom-0 right-0 px-5 py-2.5 bg-slate-900 hover:bg-cyan-950/80 border border-slate-700 hover:border-cyan-500/60 text-cyan-400 hover:text-cyan-300 rounded-xl text-xs font-mono shadow-lg hover:shadow-cyan-500/10"
             >
               ← Back to Dashboard
             </button>
 
-            <h2 className="text-2xl font-bold text-white">
-              ✋ MediaPipe SOS Gesture Tracker
+          </div>
+        )}
+
+        {/* CARD 2 DETAIL PAGE: MEDIAPIPE GESTURE TRACKER */}
+        {activePage === 'gesture_detail' && (
+          <div className="space-y-6 relative min-h-[520px] pb-20">
+
+            <h2 className="text-2xl font-bold text-white text-center">
+              MediaPipe SOS Gesture Tracker
             </h2>
 
             <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl font-mono text-xs text-slate-300 space-y-3">
 
-              <div className="text-indigo-400 font-bold">
+              <div className="text-indigo-400 font-bold text-center">
                 [Keypoint Landmarks Active]
               </div>
 
-              <p>
+              <p className="text-center">
                 Tracking 21 3D hand landmarks for distress gesture identification.
               </p>
 
-              <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl text-emerald-400">
+              <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl text-emerald-400 text-center">
                 Trigger Gesture: Open Palm SOS / Raised Hand Signal
               </div>
 
             </div>
 
-          </div>
-        )}
-
-        {/* CARD 3 DETAIL PAGE: INTERACTIVE INSTANT ALERTS / WEBHOOK DISPATCHER ⚡ */}
-        {activePage === 'alerts_detail' && (
-          <div className="space-y-6 max-w-3xl">
-
+            {/* Improved Back Button */}
             <button
               onClick={() => setActivePage('dashboard')}
-              className="text-xs font-mono text-emerald-400 hover:underline"
+              className="back-dashboard-btn absolute bottom-0 right-0 px-5 py-2.5 bg-slate-900 hover:bg-indigo-950/80 border border-slate-700 hover:border-indigo-500/60 text-indigo-400 hover:text-indigo-300 rounded-xl text-xs font-mono shadow-lg hover:shadow-indigo-500/10"
             >
               ← Back to Dashboard
             </button>
 
-            <h2 className="text-2xl font-bold text-white">
-              ⚡ Telegram & Webhook Dispatcher
+          </div>
+        )}
+
+        {/* CARD 3 DETAIL PAGE: INTERACTIVE INSTANT ALERTS / WEBHOOK DISPATCHER */}
+        {activePage === 'alerts_detail' && (
+          <div className="space-y-6 max-w-3xl mx-auto relative min-h-[520px] pb-20">
+
+            <h2 className="text-2xl font-bold text-white text-center">
+              Telegram & Webhook Dispatcher
             </h2>
 
             <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl space-y-5 text-xs">
 
-              <p className="text-slate-300 leading-relaxed">
+              <p className="text-slate-300 leading-relaxed text-center">
                 Configure your Telegram Bot token and Chat ID below to trigger live test notifications directly from the dashboard.
               </p>
 
-              {/* Form Inputs 📥 */}
+              {/* Form Inputs */}
               <div className="space-y-4 font-mono">
 
                 <div>
@@ -927,7 +1073,7 @@ function App() {
 
               </div>
 
-              {/* Send Test Dispatch Button 📲 */}
+              {/* Send Test Dispatch Button */}
               <div className="pt-2 flex items-center justify-between">
 
                 <button
@@ -936,19 +1082,29 @@ function App() {
                   className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 text-slate-950 font-bold rounded-xl text-xs transition-all shadow-md shadow-emerald-500/20 flex items-center gap-2"
                 >
                   {testStatus === 'SENDING'
-                    ? '⏳ Processing...'
-                    : '📲 Send Test Notification'}
+                    ? 'Processing...'
+                    : 'Send Test Notification'}
                 </button>
 
                 {testStatus === 'SUCCESS' && (
+
                   <span className="text-emerald-400 font-mono text-xs flex items-center gap-1.5">
-                    ✓ Telegram Payload Dispatched Successfully!
+                    Telegram Payload Dispatched Successfully!
                   </span>
+
                 )}
 
               </div>
 
             </div>
+
+            {/* Improved Back Button */}
+            <button
+              onClick={() => setActivePage('dashboard')}
+              className="back-dashboard-btn absolute bottom-0 right-0 px-5 py-2.5 bg-slate-900 hover:bg-emerald-950/80 border border-slate-700 hover:border-emerald-500/60 text-emerald-400 hover:text-emerald-300 rounded-xl text-xs font-mono shadow-lg hover:shadow-emerald-500/10"
+            >
+              ← Back to Dashboard
+            </button>
 
           </div>
         )}
