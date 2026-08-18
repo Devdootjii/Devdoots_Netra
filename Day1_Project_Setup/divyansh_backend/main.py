@@ -65,12 +65,12 @@ def camera_status():
     }
 import time
 from datetime import datetime
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 
-app = FastAPI(title="Project Netra - Multi-Camera Backend")
+app = FastAPI(title="Project Netra - Multi-Camera Backend (Async)")
 
 origins = ["http://localhost:5173", "http://localhost:3000"]
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -83,9 +83,15 @@ class MultiCamFrameData(BaseModel):
     sos_active: bool
     frame_timestamp: Optional[str] = None
 
-# Day 5 Task 1: Multi-Camera Stream Handler
+# Day 5 Task 2: Background logging function (I/O operation)
+def write_log_to_file(camera_id: str, location_name: str, latency_ms: float):
+    log_entry = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Cam: {camera_id} ({location_name}) | Latency: {latency_ms:.2f} ms\n"
+    with open("alert_latency_log.txt", "a") as log_file:
+        log_file.write(log_entry)
+
+# Day 5 Task 2: Using BackgroundTasks & async def to prevent blocking
 @app.post("/api/ai-stream")
-def receive_multicam_stream(data: MultiCamFrameData):
+async def receive_multicam_stream(data: MultiCamFrameData, background_tasks: BackgroundTasks):
     start_time = time.time()
     try:
         if data.sos_active or data.threat_level == "CRITICAL":
@@ -93,10 +99,8 @@ def receive_multicam_stream(data: MultiCamFrameData):
             
             latency_ms = (time.time() - start_time) * 1000
             
-            # Multi-camera specific log entry
-            log_entry = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%SCUL')}] Cam: {data.camera_id} ({data.location_name}) | Latency: {latency_ms:.2f} ms\n"
-            with open("alert_latency_log.txt", "a") as log_file:
-                log_file.write(log_entry)
+            # Blocking task (file writing) ko background worker ko de diya
+            background_tasks.add_task(write_log_to_file, data.camera_id, data.location_name, latency_ms)
             
             return {
                 "status": "CRITICAL_PROCESSED", 
@@ -110,8 +114,8 @@ def receive_multicam_stream(data: MultiCamFrameData):
 
     except Exception as er:
         print(f"❌ [SYSTEM ERROR] {str(er)}")
-        raise HTTPException(status_code=400, detail="Bad Request: Multi-cam data processing failed.")
+        raise HTTPException(status_code=400, detail="Bad Request: Async data processing failed.")
 
 @app.get("/api/ai-stream")
 def get_stream_status():
-    return {"status": "active", "message": "Multi-Camera backend listening for streams."}
+    return {"status": "active", "message": "Async Multi-Camera backend listening."}
