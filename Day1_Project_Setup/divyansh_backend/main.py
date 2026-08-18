@@ -70,51 +70,48 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 
-app = FastAPI(title="Project Netra Backend")
+app = FastAPI(title="Project Netra - Multi-Camera Backend")
 
 origins = ["http://localhost:5173", "http://localhost:3000"]
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-class AIFrameData(BaseModel):
+class MultiCamFrameData(BaseModel):
     camera_id: str
+    location_name: str
     threat_level: str
     persons_detected: int
     sos_active: bool
     frame_timestamp: Optional[str] = None
 
-# Day 4 Task 2: Logging Function
-def log_alert_metric(camera_id: str, latency_ms: float):
-    log_filename = "alert_latency_log.txt"
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_entry = f"[{current_time}] Camera: {camera_id} | Total Processing Latency: {latency_ms:.2f} ms\n"
-    
-    with open(log_filename, "a") as log_file:
-        log_file.write(log_entry)
-
+# Day 5 Task 1: Multi-Camera Stream Handler
 @app.post("/api/ai-stream")
-def receive_ai_stream(data: AIFrameData):
+def receive_multicam_stream(data: MultiCamFrameData):
     start_time = time.time()
     try:
         if data.sos_active or data.threat_level == "CRITICAL":
-            print(f"🚨 [CRITICAL ALERT] Camera: {data.camera_id} | SOS Active")
+            print(f"🚨 [CRITICAL ALERT] Camera ID: {data.camera_id} | Location: {data.location_name} | SOS Active")
             
-            # Latency calculate karna
             latency_ms = (time.time() - start_time) * 1000
             
-            # Log file mein data record karna
-            log_alert_metric(data.camera_id, latency_ms)
-            
-            print(f"⚡ System Latency & Logged: {latency_ms:.2f} ms")
+            # Multi-camera specific log entry
+            log_entry = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%SCUL')}] Cam: {data.camera_id} ({data.location_name}) | Latency: {latency_ms:.2f} ms\n"
+            with open("alert_latency_log.txt", "a") as log_file:
+                log_file.write(log_entry)
             
             return {
                 "status": "CRITICAL_PROCESSED", 
-                "action": "Cloud & UI Sync Triggered",
+                "camera_id": data.camera_id,
+                "location": data.location_name,
                 "latency_ms": latency_ms
             }
         
-        print(f"✅ [NORMAL] Camera: {data.camera_id} | Persons: {data.persons_detected}")
-        return {"status": "SUCCESS", "message": "Frame data received"}
+        print(f"✅ [NORMAL] Camera: {data.camera_id} ({data.location_name}) | Persons: {data.persons_detected}")
+        return {"status": "SUCCESS", "message": f"Data received from {data.camera_id}"}
 
     except Exception as er:
         print(f"❌ [SYSTEM ERROR] {str(er)}")
-        raise HTTPException(status_code=400, detail="Bad Request: Data processing failed.")
+        raise HTTPException(status_code=400, detail="Bad Request: Multi-cam data processing failed.")
+
+@app.get("/api/ai-stream")
+def get_stream_status():
+    return {"status": "active", "message": "Multi-Camera backend listening for streams."}
