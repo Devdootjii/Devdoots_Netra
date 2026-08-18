@@ -118,3 +118,10 @@ def receive_ai_stream(data: AIFrameData):
     except Exception as er:
         print(f"❌ [SYSTEM ERROR] {str(er)}")
         raise HTTPException(status_code=400, detail="Bad Request: Data processing failed.")
+# Naya GET route taaki frontend connection check karte waqt crash na ho
+@app.get("/api/ai-stream")
+def get_ai_stream_status():
+    return {
+        "status": "active",
+        "message": "AI Stream endpoint is ready to receive POST data."
+    }
