@@ -11,8 +11,12 @@ from api_service import send_alert_async
 class CameraStream:
     def __init__(self, src):
         self.stream = cv2.VideoCapture(src)
-        self.stream.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        (self.grabbed, self.frame) = self.stream.read()
+        if self.stream.isOpened():
+            self.stream.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            (self.grabbed, self.frame) = self.stream.read()
+        else:
+            self.grabbed = False
+            self.frame = None
         self.stopped = False
 
     def start(self):
@@ -23,20 +27,27 @@ class CameraStream:
         while True:
             if self.stopped:
                 return
-            (self.grabbed, self.frame) = self.stream.read()
+            if self.stream.isOpened():
+                try:
+                    (self.grabbed, self.frame) = self.stream.read()
+                except Exception:
+                    self.grabbed = False
+            else:
+                time.sleep(0.5)
 
     def read(self):
         return self.grabbed, self.frame
 
     def stop(self):
         self.stopped = True
-        self.stream.release()
+        if self.stream and self.stream.isOpened():
+            self.stream.release()
 
 load_dotenv()
 CAMERA_1_URL = os.getenv("CAMERA_1_URL")
 CAMERA_2_URL = os.getenv("CAMERA_2_URL")
 
-print("Connecting to Dual CCTV feeds with Zero-Lag Threading...")
+print("Connecting to Dual CCTV feeds with Zero-Lag & Fallback...")
 cap1 = CameraStream(CAMERA_1_URL).start()
 cap2 = CameraStream(CAMERA_2_URL).start()
 
@@ -58,15 +69,24 @@ while True:
     success1, frame1 = cap1.read()
     success2, frame2 = cap2.read()
     
-    if not success1 or not success2:
-        print("Network Drop: Ek camera disconnect ho gaya!")
-        break
+    # Offline Fallback Logic
+    if frame1 is None or not success1:
+        frame1 = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(frame1, "CAM 1 OFFLINE", (150, 240), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 255), 3)
+        count1, boxes1 = 0, []
+    
+    if frame2 is None or not success2:
+        frame2 = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(frame2, "CAM 2 OFFLINE", (150, 240), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 255), 3)
+        count2, boxes2 = 0, []
         
     frame_count += 1
     
     if frame_count % FRAME_SKIP == 0:
-        count1, boxes1 = process_frame(frame1)
-        count2, boxes2 = process_frame(frame2)
+        if frame1.any():
+            count1, boxes1 = process_frame(frame1)
+        if frame2.any():
+            count2, boxes2 = process_frame(frame2)
 
     for (x1, y1, x2, y2) in boxes1:
         cv2.rectangle(frame1, (x1, y1), (x2, y2), (0, 0, 255), 2)
