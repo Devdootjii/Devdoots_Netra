@@ -41,12 +41,25 @@ function App() {
         const response = await fetch(API_URL);
         const data = await response.json();
         setLiveData(data);
+        // ✅ NAYA CODE (Isse replace karein):
+if (data.sos_active === true || data.threat_level === 'CRITICAL') {
+  // 1. Red alert border active karein
+  setIsAlertActive(true);
 
-        if (data.sos_active === true || data.threat_level === 'CRITICAL') {
-          setIsAlertActive(true);
-        } else {
-          setIsAlertActive(false);
-        }
+  // 2. Naya alert log top par add karein
+  setAlertLogs((prevLogs) => [
+    {
+      id: Date.now(),
+      type: data.threat_level || 'CRITICAL',
+      message: 'Backend Threat Alert Triggered!',
+      time: new Date().toLocaleTimeString()
+    },
+    ...prevLogs
+  ]);
+} else {
+  setIsAlertActive(false);
+}
+
       } catch (error) {
         console.error("API connection error:", error);
       }
