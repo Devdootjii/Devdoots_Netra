@@ -4,11 +4,12 @@ function App() {
   const API_URL = "http://127.0.0.1:8000/api/ai-stream";
 
   const [liveData, setLiveData] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [isAlertActive, setIsAlertActive] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString());
 
   // Processing state for alert handling
-  const [isProcessing, setIsProcessing] = useState(false);
+  
   const processingTimeoutRef = useRef(null);
 
   // Page Navigation State
@@ -56,7 +57,7 @@ function App() {
     }
 
     processingTimeoutRef.current = setTimeout(() => {
-      setIsProcessing(false);
+      
     }, duration);
   };
 
@@ -82,6 +83,7 @@ function App() {
   // API Polling Logic 🔄
   useEffect(() => {
     const apiInterval = setInterval(async () => {
+      
       try {
         const response = await fetch(API_URL);
         const data = await response.json();
@@ -93,7 +95,7 @@ function App() {
           data.threat_level === 'CRITICAL';
 
         setIsAlertActive(alertDetected);
-
+        setIsProcessing(false)
         // Show processing indicator only when an alert is detected
         if (alertDetected) {
           showProcessing(1800);
@@ -232,44 +234,40 @@ function App() {
 
           <button
             onClick={() => setActivePage('dashboard')}
-            className={`px-3.5 py-1.5 rounded-md transition-all ${
-              activePage === 'dashboard'
+            className={`px-3.5 py-1.5 rounded-md transition-all ${activePage === 'dashboard'
                 ? 'text-white bg-slate-800/80 border border-slate-700/50 shadow-sm'
                 : 'hover:text-slate-100 hover:bg-slate-800/50 border border-transparent'
-            }`}
+              }`}
           >
             Dashboard
           </button>
 
           <button
             onClick={() => setActivePage('alerts')}
-            className={`px-3.5 py-1.5 rounded-md transition-all ${
-              activePage === 'alerts'
+            className={`px-3.5 py-1.5 rounded-md transition-all ${activePage === 'alerts'
                 ? 'text-white bg-slate-800/80 border border-slate-700/50 shadow-sm'
                 : 'hover:text-slate-100 hover:bg-slate-800/50 border border-transparent'
-            }`}
+              }`}
           >
             Alerts
           </button>
 
           <button
             onClick={() => setActivePage('livefeed')}
-            className={`px-3.5 py-1.5 rounded-md transition-all ${
-              activePage === 'livefeed'
+            className={`px-3.5 py-1.5 rounded-md transition-all ${activePage === 'livefeed'
                 ? 'text-white bg-slate-800/80 border border-slate-700/50 shadow-sm'
                 : 'hover:text-slate-100 hover:bg-slate-800/50 border border-transparent'
-            }`}
+              }`}
           >
             Live Feed
           </button>
 
           <button
             onClick={() => setActivePage('settings')}
-            className={`px-3.5 py-1.5 rounded-md transition-all ${
-              activePage === 'settings'
+            className={`px-3.5 py-1.5 rounded-md transition-all ${activePage === 'settings'
                 ? 'text-white bg-slate-800/80 border border-slate-700/50 shadow-sm'
                 : 'hover:text-slate-100 hover:bg-slate-800/50 border border-transparent'
-            }`}
+              }`}
           >
             Settings
           </button>
@@ -414,8 +412,12 @@ function App() {
                 <span className="text-slate-400">
                   API Status:
                 </span>
-
-                {liveData ? (
+                {isProcessing ? (
+                  <span className="text-amber-400 font-semibold flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                    Processing...
+                  </span>
+                ) : liveData ? (
                   <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                     Connected
@@ -456,11 +458,10 @@ function App() {
                       setIsProcessing(false);
                     }
                   }}
-                  className={`px-6 py-3 rounded-xl font-medium text-sm transition-all duration-200 shadow-lg ${
-                    isAlertActive
+                  className={`px-6 py-3 rounded-xl font-medium text-sm transition-all duration-200 shadow-lg ${isAlertActive
                       ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-900/50'
                       : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold shadow-cyan-500/20'
-                  }`}
+                    }`}
                 >
                   {isAlertActive
                     ? 'Reset Emergency Alert'
@@ -597,11 +598,10 @@ function App() {
                 <button
                   key={filter}
                   onClick={() => setAlertFilter(filter)}
-                  className={`px-3 py-1 rounded-md transition-all ${
-                    alertFilter === filter
+                  className={`px-3 py-1 rounded-md transition-all ${alertFilter === filter
                       ? 'bg-slate-800 text-cyan-400 border border-cyan-500/30'
                       : 'text-slate-400 hover:text-white'
-                  }`}
+                    }`}
                 >
                   {filter} (
                   {filter === 'ALL'
@@ -624,13 +624,12 @@ function App() {
                 filteredLogs.map(log => (
                   <div
                     key={log.id}
-                    className={`p-3.5 border rounded-xl flex justify-between items-center transition-all ${
-                      log.type === 'CRITICAL'
+                    className={`p-3.5 border rounded-xl flex justify-between items-center transition-all ${log.type === 'CRITICAL'
                         ? 'bg-red-950/40 border-red-800/50 text-red-300'
                         : log.type === 'WARNING'
-                        ? 'bg-amber-950/40 border-amber-800/50 text-amber-300'
-                        : 'bg-slate-950 border-slate-800 text-slate-400'
-                    }`}
+                          ? 'bg-amber-950/40 border-amber-800/50 text-amber-300'
+                          : 'bg-slate-950 border-slate-800 text-slate-400'
+                      }`}
                   >
 
                     <div className="flex items-center gap-2.5">
@@ -764,11 +763,10 @@ function App() {
 
                 <button
                   onClick={() => setTelegramEnabled(!telegramEnabled)}
-                  className={`w-12 h-6 flex items-center rounded-full p-1 transition-all duration-300 ${
-                    telegramEnabled
+                  className={`w-12 h-6 flex items-center rounded-full p-1 transition-all duration-300 ${telegramEnabled
                       ? 'bg-emerald-600 justify-end'
                       : 'bg-slate-800 justify-start'
-                  }`}
+                    }`}
                 >
                   <span className="w-4 h-4 rounded-full bg-white shadow-md"></span>
                 </button>
