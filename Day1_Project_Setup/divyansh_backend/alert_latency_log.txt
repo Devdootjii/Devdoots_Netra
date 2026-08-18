@@ -1,2 +1,4 @@
 [2026-08-17 12:51:34] Camera: Cam_Stress_Test | Total Processing Latency: 2.89 ms
 [2026-08-18 11:05:19CUL] Cam: Cam_02 (Main Gate) | Latency: 0.97 ms
+[2026-08-18 19:43:07] Cam: Cam_02 (Testing Zone) | Latency: 0.00 ms
+[2026-08-18 19:43:07] Cam: Cam_01 (Testing Zone) | Latency: 0.00 ms
