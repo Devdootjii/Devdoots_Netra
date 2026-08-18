@@ -1,13 +1,18 @@
 import cv2
 import time
+import os
+from dotenv import load_dotenv
 
 # Hamari doosri files se functions import kar rahe hain
 from ai_processor import process_frame
 from api_service import send_alert_async
 
 # --- SETUP ---
-cap = cv2.VideoCapture(0)
+load_dotenv()
+CAMERA_URL = os.getenv("CAMERA_URL", 0)
 
+print(f"Connecting to Camera feed: {CAMERA_URL}")
+cap = cv2.VideoCapture(CAMERA_URL)
 LAST_ALERT_TIME = 0
 COOLDOWN_SECONDS = 5
 FRAME_SKIP = 3
