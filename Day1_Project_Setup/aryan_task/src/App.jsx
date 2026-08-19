@@ -1,3 +1,7 @@
+import NetraFooter from './NetraFooter';
+import NetraHeaderLogo from './NetraHeaderLogo';
+
+
 import React, { useEffect, useRef, useState } from "react";
 
 function App() {
@@ -737,7 +741,7 @@ function App() {
   // =========================================================
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col">
 
       <style>{styles}</style>
 
@@ -756,15 +760,15 @@ function App() {
           onClick={() => setActivePage("dashboard")}
         >
 
-          <div className="w-9 h-9 rounded-full bg-cyan-950 border border-cyan-500/40 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-            <span className="text-cyan-400 font-black">N</span>
-          </div>
+          
 
-          <h1 className="font-black font-mono netra-logo text-cyan-400">
-            <span className="text-2xl">N</span>
-            <span className="text-xl">ETR</span>
-            <span className="text-2xl">A</span>
-          </h1>
+          <div
+          className="flex items-center gap-3 cursor-pointer"
+          onClick={() => setActivePage("dashboard")}
+        >
+          {/* Aryan ka purana logo delete karke ye line daal di */}
+          <NetraHeaderLogo />
+        </div>
 
         </div>
 
@@ -846,7 +850,7 @@ function App() {
 
       {/* MAIN */}
 
-      <main className="max-w-7xl mx-auto px-6 py-10">
+      <main className="max-w-7xl mx-auto px-6 py-10 flex-grow w-full">
 
         {/* PROCESSING */}
 
@@ -2035,9 +2039,11 @@ function App() {
         )}
 
       </main>
+      <NetraFooter />
 
     </div>
   );
 }
 
 export default App;
+        
