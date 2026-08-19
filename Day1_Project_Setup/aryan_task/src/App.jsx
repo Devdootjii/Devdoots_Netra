@@ -19,7 +19,6 @@ function App() {
   const [camera2Online, setCamera2Online] = useState(false);
 
   const [camera1Refresh, setCamera1Refresh] = useState(0);
-  const [camera2Refresh, setCamera2Refresh] = useState(0);
 
   // =========================================================
   // OPTIMIZED CAMERA STATUS CHECK
