@@ -119,3 +119,40 @@ async def receive_multicam_stream(data: MultiCamFrameData, background_tasks: Bac
 @app.get("/api/ai-stream")
 def get_stream_status():
     return {"status": "active", "message": "Async Multi-Camera backend listening."}
+
+import json
+import os
+from pydantic import BaseModel
+
+# Naya model incoming URLs receive karne ke liye
+class CameraUpdate(BaseModel):
+    camera_1_url: str
+    camera_2_url: str
+
+# Day 6 Task: Dynamic Camera Config Updater
+@app.post("/api/update-camera-urls")
+async def update_camera_urls(data: CameraUpdate):
+    try:
+        config_data = {
+            "cam_1": data.camera_1_url,
+            "cam_2": data.camera_2_url
+        }
+        
+        # Root directory (Day1_Project_Setup) me JSON file save karna
+        # Assumes main.py is inside divyansh_backend folder
+        config_path = os.path.join(os.path.dirname(__file__), "..", "camera_config.json")
+        
+        with open(config_path, "w") as f:
+            json.dump(config_data, f, indent=4)
+            
+        print(f"✅ [CONFIG UPDATED] Cam 1: {data.camera_1_url} | Cam 2: {data.camera_2_url}")
+        
+        return {
+            "status": "SUCCESS", 
+            "message": "Camera URLs updated successfully", 
+            "config": config_data
+        }
+        
+    except Exception as e:
+        print(f"❌ [CONFIG ERROR] {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to write config file.")
