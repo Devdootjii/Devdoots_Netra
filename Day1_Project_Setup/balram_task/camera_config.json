@@ -1,0 +1,4 @@
+{
+  "CAMERA_1_URL": "http://192.168.31.198:4747/video",
+  "CAMERA_2_URL": "http://192.168.31.11:4747/video"
+}
