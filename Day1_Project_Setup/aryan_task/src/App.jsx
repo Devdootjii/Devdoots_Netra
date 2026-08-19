@@ -529,13 +529,15 @@ function App() {
       text-shadow: 0 2px 12px rgba(6,182,212,.18);
     }
 
-    /* =====================================================
-       WELCOME TEXT WAVE - SAME ANIMATION
-       ===================================================== */
-
     .welcome-letter {
       display: inline-block;
       position: relative;
+      transition:
+        transform .28s cubic-bezier(.2,.8,.2,1),
+        filter .25s ease;
+    }
+
+    .welcome-gradient {
       background: linear-gradient(
         90deg,
         #22d3ee 0%,
@@ -547,9 +549,22 @@ function App() {
       background-clip: text;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
-      transition:
-        transform .28s cubic-bezier(.2,.8,.2,1),
-        filter .25s ease;
+      animation: welcomeWave 4s linear infinite;
+    }
+
+    .welcome-white {
+      color: #ffffff;
+      -webkit-text-fill-color: #ffffff;
+    }
+
+    @keyframes welcomeWave {
+      0% {
+        background-position: 0% center;
+      }
+
+      100% {
+        background-position: 200% center;
+      }
     }
 
     .welcome-letter:hover {
@@ -575,25 +590,19 @@ function App() {
         box-shadow .35s ease;
     }
 
-    /*
-      Soft light behind card.
-      Normally hidden.
-      Cursor aate hi halki glow dikhegi.
-    */
-
     .feature-card::before {
       content: "";
       position: absolute;
       z-index: -1;
-      left: 10%;
-      right: 10%;
-      bottom: -18px;
-      height: 55%;
+      left: 5%;
+      right: 5%;
+      bottom: -28px;
+      height: 65%;
       border-radius: 50%;
-      background: rgba(34,211,238,.18);
-      filter: blur(35px);
+      background: rgba(34,211,238,.30);
+      filter: blur(38px);
       opacity: 0;
-      transform: scale(.8);
+      transform: scale(.65);
       transition:
         opacity .35s ease,
         transform .35s ease,
@@ -602,36 +611,49 @@ function App() {
     }
 
     .feature-card:nth-child(2)::before {
-      background: rgba(129,140,248,.18);
+      background: rgba(129,140,248,.30);
     }
 
     .feature-card:nth-child(3)::before {
-      background: rgba(16,185,129,.16);
+      background: rgba(16,185,129,.28);
     }
 
     .feature-card:hover {
-      transform: translateY(-10px);
+      transform: translateY(-12px) scale(1.015);
       box-shadow:
-        0 18px 45px rgba(0,0,0,.25);
+        0 22px 50px rgba(0,0,0,.35);
     }
 
     .feature-card:hover::before {
       opacity: 1;
-      transform: scale(1);
-      filter: blur(32px);
+      transform: scale(1.15);
+      filter: blur(34px);
     }
 
     .feature-card:nth-child(1):hover {
-      border-color: rgba(34,211,238,.35);
+      border-color: rgba(34,211,238,.55);
+      box-shadow:
+        0 22px 50px rgba(0,0,0,.35),
+        0 0 35px rgba(34,211,238,.13);
     }
 
     .feature-card:nth-child(2):hover {
-      border-color: rgba(129,140,248,.35);
+      border-color: rgba(129,140,248,.55);
+      box-shadow:
+        0 22px 50px rgba(0,0,0,.35),
+        0 0 35px rgba(129,140,248,.13);
     }
 
     .feature-card:nth-child(3):hover {
-      border-color: rgba(16,185,129,.35);
+      border-color: rgba(16,185,129,.55);
+      box-shadow:
+        0 22px 50px rgba(0,0,0,.35),
+        0 0 35px rgba(16,185,129,.13);
     }
+
+    /* =====================================================
+       FEATURE NAME BOXES
+       ===================================================== */
 
     .feature-name-box {
       display: flex;
@@ -642,8 +664,60 @@ function App() {
       margin: 0 auto 16px;
       padding: 8px 18px;
       border-radius: 8px;
-      background: rgba(15,23,42,.9);
-      border: 1px solid rgba(71,85,105,.7);
+      transition:
+        transform .3s ease,
+        box-shadow .3s ease,
+        background .3s ease,
+        border-color .3s ease;
+    }
+
+    .camera-name-box {
+      background: rgba(8,47,73,.75);
+      border: 1px solid rgba(34,211,238,.55);
+      box-shadow:
+        0 0 15px rgba(34,211,238,.08),
+        inset 0 0 15px rgba(34,211,238,.04);
+    }
+
+    .gesture-name-box {
+      background: rgba(49,46,129,.55);
+      border: 1px solid rgba(129,140,248,.55);
+      box-shadow:
+        0 0 15px rgba(129,140,248,.08),
+        inset 0 0 15px rgba(129,140,248,.04);
+    }
+
+    .alert-name-box {
+      background: rgba(6,78,59,.55);
+      border: 1px solid rgba(16,185,129,.55);
+      box-shadow:
+        0 0 15px rgba(16,185,129,.08),
+        inset 0 0 15px rgba(16,185,129,.04);
+    }
+
+    .feature-card:hover .feature-name-box {
+      transform: translateY(-3px);
+    }
+
+    .feature-card:nth-child(1):hover .camera-name-box {
+      background: rgba(8,47,73,.95);
+      box-shadow:
+        0 0 22px rgba(34,211,238,.25),
+        inset 0 0 18px rgba(34,211,238,.08);
+    }
+
+    .feature-card:nth-child(2):hover .gesture-name-box {
+      background: rgba(49,46,129,.80);
+      box-shadow:
+        0 0 22px rgba(129,140,248,.25),
+        inset 0 0 18px rgba(129,140,248,.08);
+    }
+
+    .feature-card:nth-child(3):hover .alert-name-box {
+      background: rgba(6,78,59,.80);
+      box-shadow:
+        0 0 22px rgba(16,185,129,.25),
+        inset 0 0 18px rgba(16,185,129,.08);
     }
 
     .back-dashboard-btn {
@@ -667,17 +741,13 @@ function App() {
 
       <style>{styles}</style>
 
-      {/* =====================================================
-          ALERT OVERLAY
-      ===================================================== */}
+      {/* ALERT OVERLAY */}
 
       {isAlertActive && (
         <div className="fixed inset-0 bg-red-600/20 pointer-events-none animate-pulse z-50 border-8 border-red-600" />
       )}
 
-      {/* =====================================================
-          HEADER
-      ===================================================== */}
+      {/* HEADER */}
 
       <header className="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md sticky top-0 z-40 px-6 py-3.5 flex items-center justify-between">
 
@@ -774,9 +844,7 @@ function App() {
 
       </header>
 
-      {/* =====================================================
-          MAIN
-      ===================================================== */}
+      {/* MAIN */}
 
       <main className="max-w-7xl mx-auto px-6 py-10">
 
@@ -828,9 +896,7 @@ function App() {
           </div>
         )}
 
-        {/* =====================================================
-            DASHBOARD
-        ===================================================== */}
+        {/* DASHBOARD */}
 
         {activePage === "dashboard" && (
           <div>
@@ -845,16 +911,35 @@ function App() {
 
               </div>
 
+              {/* =================================================
+                  WELCOME TO NETRA
+                  "WELCOME TO" = WHITE
+                  "NETRA" = ORIGINAL GRADIENT + WAVE
+                 ================================================= */}
+
               <h1 className="text-5xl sm:text-7xl lg:text-8xl font-extrabold tracking-tight mb-7">
 
-                {"Welcome to Netra".split("").map(
+                {"Welcome to ".split("").map(
                   (letter, index) => (
 
                     <span
-                      key={index}
-                      className="welcome-letter"
+                      key={`white-${index}`}
+                      className="welcome-letter welcome-white"
                     >
                       {letter === " " ? "\u00A0" : letter}
+                    </span>
+
+                  )
+                )}
+
+                {"Netra".split("").map(
+                  (letter, index) => (
+
+                    <span
+                      key={`gradient-${index}`}
+                      className="welcome-letter welcome-gradient"
+                    >
+                      {letter}
                     </span>
 
                   )
@@ -918,9 +1003,9 @@ function App() {
                 className="feature-card bg-slate-900/40 border border-slate-800 p-8 rounded-2xl min-h-[250px] flex flex-col justify-center hover:bg-slate-900/80 cursor-pointer"
               >
 
-                <div className="feature-name-box border-cyan-800/50">
+                <div className="feature-name-box camera-name-box">
 
-                  <span className="text-cyan-400 text-base font-bold font-mono">
+                  <span className="text-cyan-300 text-base font-bold font-mono">
                     Camera
                   </span>
 
@@ -943,9 +1028,9 @@ function App() {
                 className="feature-card bg-slate-900/40 border border-slate-800 p-8 rounded-2xl min-h-[250px] flex flex-col justify-center hover:bg-slate-900/80 cursor-pointer"
               >
 
-                <div className="feature-name-box border-indigo-800/50">
+                <div className="feature-name-box gesture-name-box">
 
-                  <span className="text-indigo-400 text-base font-bold font-mono">
+                  <span className="text-indigo-300 text-base font-bold font-mono">
                     Gesture
                   </span>
 
@@ -968,9 +1053,9 @@ function App() {
                 className="feature-card bg-slate-900/40 border border-slate-800 p-8 rounded-2xl min-h-[250px] flex flex-col justify-center hover:bg-slate-900/80 cursor-pointer"
               >
 
-                <div className="feature-name-box border-emerald-800/50">
+                <div className="feature-name-box alert-name-box">
 
-                  <span className="text-emerald-400 text-base font-bold font-mono">
+                  <span className="text-emerald-300 text-base font-bold font-mono">
                     Alerts
                   </span>
 
@@ -991,9 +1076,7 @@ function App() {
           </div>
         )}
 
-        {/* =====================================================
-            ALERTS
-        ===================================================== */}
+        {/* ALERTS */}
 
         {activePage === "alerts" && (
           <div className="space-y-6">
@@ -1104,9 +1187,7 @@ function App() {
           </div>
         )}
 
-        {/* =====================================================
-            LIVE FEED / DROIDCAM
-        ===================================================== */}
+        {/* LIVE FEED / DROIDCAM */}
 
         {activePage === "livefeed" && (
           <div className="space-y-6">
@@ -1582,6 +1663,64 @@ function App() {
 
                 </div>
 
+                {/* CAMERA 2 DEVICE / PORT / STATUS */}
+
+                <div className="grid grid-cols-3 gap-3 mt-4">
+
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-center">
+
+                    <div className="text-slate-500 text-[10px] font-mono">
+                      DEVICE
+                    </div>
+
+                    <div className="text-indigo-400 text-xs font-mono mt-1">
+                      Camera #2
+                    </div>
+
+                  </div>
+
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-center">
+
+                    <div className="text-slate-500 text-[10px] font-mono">
+                      PORT
+                    </div>
+
+                    <div className="text-indigo-400 text-xs font-mono mt-1">
+                      {camera2Url
+                        ? (() => {
+                            try {
+                              return new URL(camera2Url).port || "N/A";
+                            } catch {
+                              return "N/A";
+                            }
+                          })()
+                        : "N/A"}
+                    </div>
+
+                  </div>
+
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-center">
+
+                    <div className="text-slate-500 text-[10px] font-mono">
+                      STATUS
+                    </div>
+
+                    <div
+                      className={`text-xs font-mono mt-1 ${
+                        camera2Online
+                          ? "text-emerald-400"
+                          : "text-red-400"
+                      }`}
+                    >
+                      {camera2Online
+                        ? "Connected"
+                        : "Offline"}
+                    </div>
+
+                  </div>
+
+                </div>
+
               </div>
 
             </div>
@@ -1589,9 +1728,7 @@ function App() {
           </div>
         )}
 
-        {/* =====================================================
-            SETTINGS
-        ===================================================== */}
+        {/* SETTINGS */}
 
         {activePage === "settings" && (
 
@@ -1706,9 +1843,7 @@ function App() {
 
         )}
 
-        {/* =====================================================
-            YOLO DETAIL
-        ===================================================== */}
+        {/* YOLO DETAIL */}
 
         {activePage === "yolo_detail" && (
 
@@ -1771,9 +1906,7 @@ function App() {
 
         )}
 
-        {/* =====================================================
-            GESTURE DETAIL
-        ===================================================== */}
+        {/* GESTURE DETAIL */}
 
         {activePage === "gesture_detail" && (
 
@@ -1810,9 +1943,7 @@ function App() {
 
         )}
 
-        {/* =====================================================
-            ALERT DETAIL
-        ===================================================== */}
+        {/* ALERT DETAIL */}
 
         {activePage === "alerts_detail" && (
 
