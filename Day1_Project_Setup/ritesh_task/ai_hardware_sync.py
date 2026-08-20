@@ -3,7 +3,7 @@ import time
 import threading
 import json
 import os
-import numpy as np
+import requests
 import mediapipe as mp
 from ultralytics import YOLO
 from dotenv import load_dotenv
@@ -13,11 +13,11 @@ from dotenv import load_dotenv
 # ==========================================
 load_dotenv()
 YOLO_PATH = os.getenv("MODEL_PATH", "../models/yolov8n.pt")
-# PDF Task: File located in the root directory[cite: 3]
 CONFIG_FILE = "../camera_config.json" 
+# PDF Phase 2: Target FastAPI server URL
+BACKEND_API_URL = "http://127.0.0.1:8000/api/ai-stream"
 
 def get_camera_urls():
-    # PDF Task: Read stream sources dynamically[cite: 4]
     try:
         if os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE, 'r') as f:
@@ -33,7 +33,26 @@ def get_camera_urls():
     return 0, ""
 
 # ==========================================
-# 2. BULLETPROOF HOT-RELOADING STREAM CLASS
+# 2. API CLIENT (Send Data to Backend)
+# ==========================================
+def send_detection_data(cam_id, loc_name, threat_level, persons, is_sos):
+    # PDF Phase 2: Send POST request with JSON structure
+    payload = {
+        "camera_id": cam_id,
+        "location_name": loc_name,
+        "threat_level": threat_level,
+        "persons_detected": persons,
+        "sos_active": is_sos # Phase 4: Flags the backend for Telegram alert
+    }
+    try:
+        # Use a short timeout so AI loop doesn't lag if backend is slow
+        requests.post(BACKEND_API_URL, json=payload, timeout=1.0)
+        print(f"[{cam_id}] API Synced | Persons: {persons} | SOS: {is_sos}")
+    except requests.exceptions.RequestException:
+        print(f"[{cam_id}] Warning: Backend unreachable at {BACKEND_API_URL}")
+
+# ==========================================
+# 3. HOT-RELOADING STREAM CLASS
 # ==========================================
 class CameraStream:
     def __init__(self, name, url):
@@ -45,7 +64,7 @@ class CameraStream:
         self.grabbed = False
         self.frame = None
         self.stopped = False
-        self.reloading = False # Safety switch to prevent thread crashes
+        self.reloading = False 
         self.lock = threading.Lock()
 
     def start(self):
@@ -53,11 +72,11 @@ class CameraStream:
         return self
 
     def reload_stream(self, new_url):
-        # PDF Task: Seamless stream switching without crashing the AI model[cite: 3, 4]
+        # Phase 3: Hot-Reloading using cap.release()[cite: 6]
         if str(self.url) != str(new_url):
             print(f"\n🔄 Hot-Reloading {self.name} to new URL...")
-            self.reloading = True # Pause background thread
-            time.sleep(0.3) # Give it a moment to stop safely
+            self.reloading = True 
+            time.sleep(0.3) 
             
             with self.lock:
                 self.url = new_url
@@ -70,8 +89,8 @@ class CameraStream:
                 else:
                     self.stream = None
                     
-            self.reloading = False # Resume background thread
-            print(f"✅ {self.name} successfully transitioned!")
+            self.reloading = False 
+            print(f"✅ {self.name} transition complete!")
 
     def update(self):
         while not self.stopped:
@@ -88,7 +107,6 @@ class CameraStream:
                 else:
                     time.sleep(0.1)
             except Exception:
-                # Catch any OpenCV C++ exceptions during transition silently
                 time.sleep(0.1)
 
     def read(self):
@@ -102,40 +120,38 @@ class CameraStream:
             self.stream.release()
 
 # ==========================================
-# 3. INITIALIZE AI MODELS
+# 4. INITIALIZE AI MODELS
 # ==========================================
-print("[NETRA ENGINE] Loading YOLOv8 and Pose Models...")
+print("[NETRA ENGINE] Loading Headless YOLOv8 and Pose Models...")
 yolo_model = YOLO(YOLO_PATH)
 mp_pose = mp.solutions.pose
-mp_drawing = mp.solutions.drawing_utils
 pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
-# ==========================================
-# 4. SYSTEM STARTUP
-# ==========================================
 url1, url2 = get_camera_urls()
 cam1 = CameraStream("Cam 1", url1).start()
 cam2 = CameraStream("Cam 2", url2).start()
 time.sleep(2.0)
 
-window_title = "Project Netra - Dual Live AI Sync"
-cv2.namedWindow(window_title, cv2.WINDOW_NORMAL)
-
-# PDF Task: File-watching mechanism/interval polling[cite: 3, 4]
-last_mod_time = os.path.getmtime(CONFIG_FILE) if os.path.exists(CONFIG_FILE) else 0
-check_interval = 2.0
+# Phase 3: Loop reloads every 5 seconds[cite: 6]
+check_interval = 5.0
 last_check_time = time.time()
+last_mod_time = os.path.getmtime(CONFIG_FILE) if os.path.exists(CONFIG_FILE) else 0
 frame_idx = 0
 
-print("🚀 AI System is LIVE! Dual Architecture active.")
+# 2.5 Second Hold Logic Variables
+cached_threat1 = False
+sos_start_time = 0
+is_sos_holding = False
+
+print("🚀 Headless AI System is LIVE! Sending data to Backend API...")
 
 # ==========================================
-# 5. MAIN EVENT LOOP & AI PROCESSING
+# 5. MAIN HEADLESS AI LOOP
 # ==========================================
 while True:
     now = time.time()
 
-    # Day 6 Polling: Detect changes without restarting script[cite: 3, 4]
+    # Dynamic Config Polling (Phase 3)[cite: 6]
     if now - last_check_time > check_interval:
         if os.path.exists(CONFIG_FILE):
             current_mod_time = os.path.getmtime(CONFIG_FILE)
@@ -148,57 +164,54 @@ while True:
 
     frame_idx += 1
     
-    # Process Cam 1
+    # Process Cam 1 Data (No Display)
     grabbed1, f1 = cam1.read()
     if grabbed1 and f1 is not None:
-        f1 = cv2.flip(f1, 1) # Fix Mirror Issue
-        f1 = cv2.resize(f1, (640, 480))
-        cached_threat1 = False
+        f1 = cv2.flip(f1, 1) 
         
-        # AI Logic for Cam 1
-        if frame_idx % 3 == 0:
+        # Only process every 10th frame for the API to avoid spamming the backend
+        if frame_idx % 10 == 0:
+            persons_count = 0 
+            gesture_detected_this_frame = False
+            
+            # Detect Persons
             results = yolo_model(f1, classes=[0], verbose=False)
             for r in results:
-                for b in r.boxes:
-                    x1, y1, x2, y2 = map(int, b.xyxy[0])
-                    cv2.rectangle(f1, (x1, y1), (x2, y2), (255, 120, 0), 2)
+                persons_count += len(r.boxes)
             
+            # Detect Pose (SOS)
             rgb = cv2.cvtColor(f1, cv2.COLOR_BGR2RGB)
             res = pose.process(rgb)
             if res.pose_landmarks:
-                mp_drawing.draw_landmarks(f1, res.pose_landmarks, mp_pose.POSE_CONNECTIONS)
                 lm = res.pose_landmarks.landmark
-                l_sh, r_sh = lm[mp_pose.PoseLandmark.LEFT_SHOULDER].y, lm[mp_pose.PoseLandmark.RIGHT_SHOULDER].y
-                l_wr, r_wr = lm[mp_pose.PoseLandmark.LEFT_WRIST].y, lm[mp_pose.PoseLandmark.RIGHT_WRIST].y
+                l_sh, r_sh = lm[11].y, lm[12].y
+                l_wr, r_wr = lm[15].y, lm[16].y
+                
                 if (l_wr < l_sh) or (r_wr < r_sh):
+                    gesture_detected_this_frame = True
+
+            # The 2.5 Seconds Hold Logic
+            if gesture_detected_this_frame:
+                if not is_sos_holding:
+                    is_sos_holding = True
+                    sos_start_time = time.time()
+                elif time.time() - sos_start_time >= 2.5:
                     cached_threat1 = True
+            else:
+                is_sos_holding = False
+                sos_start_time = 0
+                cached_threat1 = False
 
-        if cached_threat1:
-            cv2.putText(f1, "SOS THREAT DETECTED!", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-        else:
-            cv2.putText(f1, "CAM 1 | AI SECURE", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-    else:
-        f1 = np.zeros((480, 640, 3), dtype=np.uint8)
-        cv2.putText(f1, "CAM 1 OFFLINE / RELOADING", (120, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+            # Dispatch API Request in background
+            threat_level = "CRITICAL" if cached_threat1 else "SAFE"
+            threading.Thread(
+                target=send_detection_data, 
+                args=("CAM 01", "Main Entrance", threat_level, persons_count, cached_threat1),
+                daemon=True
+            ).start()
 
-    # Process Cam 2
-    grabbed2, f2 = cam2.read()
-    if grabbed2 and f2 is not None:
-        f2 = cv2.flip(f2, 1)
-        f2 = cv2.resize(f2, (640, 480))
-        cv2.putText(f2, "CAM 2 | LIVE FEED", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-    else:
-        f2 = np.zeros((480, 640, 3), dtype=np.uint8)
-        cv2.putText(f2, "CAM 2 OFFLINE / RELOADING", (120, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-
-    # Combine frames horizontally (Dual Screen Mode)
-    combined_frame = np.hstack((f1, f2))
-    cv2.imshow(window_title, combined_frame)
-
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+    time.sleep(0.01) # Small sleep to stabilize CPU loop
 
 cam1.stop()
 cam2.stop()
-cv2.destroyAllWindows()
 pose.close()
