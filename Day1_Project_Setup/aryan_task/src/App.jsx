@@ -9,7 +9,23 @@ function App() {
   // API
   // =========================================================
 
-  const API_URL = "http://127.0.0.1:8000/api/ai-stream";
+  const BACKEND_BASE = "http://127.0.0.1:8000";
+  const AI_ENGINE_BASE = "http://127.0.0.1:8001";
+
+  const API_URL = `${BACKEND_BASE}/api/ai-stream`;
+  // FIX: this version was missing the camera-config sync endpoint entirely -
+  // without this, connectCamera1() never tells the backend/engine what the
+  // phone's URL is, so the engine keeps processing whatever it was on before
+  // (or nothing) no matter what you type into the Camera #1 field.
+  const CAMERA_CONFIG_URL = `${BACKEND_BASE}/api/update-camera-urls`;
+  // FIX: this version had no reference to the engine's processed stream at
+  // all - that's why "AI Processed Feed" never showed real output.
+  const AI_LIVE_FEED_URL = `${AI_ENGINE_BASE}/live-feed`;
+  // FIX: raw preview must also go through the engine, not straight to the
+  // phone - DroidCam only allows ONE connected client at a time, so if the
+  // browser and the engine both try to open the phone's URL directly, one of
+  // them gets DroidCam's "busy" page instead of video.
+  const AI_RAW_FEED_URL = `${AI_ENGINE_BASE}/raw-feed`;
 
   // =========================================================
   // GLOBAL STATE
@@ -25,6 +41,28 @@ function App() {
   );
 
   const [activePage, setActivePage] = useState("dashboard");
+  const [booted, setBooted] = useState(false);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    let frame = 0;
+    const handlePointerMove = (event) => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const x = event.clientX / window.innerWidth;
+        const y = event.clientY / window.innerHeight;
+        root.style.setProperty("--netra-mx", `${(x - 0.5) * 2}`);
+        root.style.setProperty("--netra-my", `${(y - 0.5) * 2}`);
+        root.style.setProperty("--netra-cursor-x", `${x * 100}%`);
+        root.style.setProperty("--netra-cursor-y", `${y * 100}%`);
+      });
+    };
+    window.addEventListener("pointermove", handlePointerMove, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("pointermove", handlePointerMove);
+    };
+  }, []);
 
   // =========================================================
   // DROIDCAM / CAMERA STATE
@@ -123,6 +161,23 @@ function App() {
     setCameraSyncStatus({
       type: "INFO",
       message: "Connecting to DroidCam Camera #1...",
+    });
+
+    // FIX (root cause of "processing nahi ho rahi"): this fetch call didn't
+    // exist in this version at all. Without it, camera_config.json on the
+    // backend never learns your phone's URL, so netra_unified_engine.py has
+    // no way to know what to process - it just keeps failing/idling
+    // regardless of what you type into this field.
+    fetch(CAMERA_CONFIG_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        camera_1_url: url,
+        camera_2_url: "",
+      }),
+    }).catch(() => {
+      // Backend abhi unreachable ho sakta hai - status neeche wale onLoad/onError
+      // se hi decide ho jayega, isliye yahan silently ignore karna theek hai.
     });
 
     setCamera1Refresh((prev) => prev + 1);
@@ -734,16 +789,791 @@ function App() {
     .back-dashboard-btn:hover {
       transform: translateY(-2px);
     }
+
+    /* =====================================================
+       NETRA // CINEMATIC UI MOTION PACK
+       Pure CSS: no extra dependency, API/camera logic untouched.
+       ===================================================== */
+
+    :root {
+      --netra-cyan: #22d3ee;
+      --netra-blue: #38bdf8;
+      --netra-indigo: #818cf8;
+      --netra-emerald: #10b981;
+      --netra-red: #ef4444;
+    }
+
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(34,211,238,.45) rgba(2,6,23,.65);
+    }
+
+    ::selection {
+      background: rgba(34,211,238,.28);
+      color: #fff;
+    }
+
+    .netra-shell {
+      position: relative;
+      isolation: isolate;
+      overflow-x: hidden;
+      background:
+        radial-gradient(circle at 12% 8%, rgba(34,211,238,.075), transparent 28%),
+        radial-gradient(circle at 88% 18%, rgba(129,140,248,.07), transparent 30%),
+        radial-gradient(circle at 50% 100%, rgba(16,185,129,.045), transparent 34%),
+        #020617;
+    }
+
+    .netra-shell::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -3;
+      pointer-events: none;
+      opacity: .28;
+      background-image:
+        linear-gradient(rgba(34,211,238,.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(34,211,238,.045) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: linear-gradient(to bottom, black, transparent 92%);
+      animation: gridDrift 18s linear infinite;
+    }
+
+    .netra-shell::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      pointer-events: none;
+      opacity: .055;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(255,255,255,.08) 0px,
+        rgba(255,255,255,.08) 1px,
+        transparent 1px,
+        transparent 4px
+      );
+      mix-blend-mode: overlay;
+    }
+
+    @keyframes gridDrift {
+      from { background-position: 0 0, 0 0; }
+      to { background-position: 48px 48px, 48px 48px; }
+    }
+
+    .netra-ambient {
+      position: fixed;
+      width: 420px;
+      height: 420px;
+      border-radius: 999px;
+      pointer-events: none;
+      z-index: -2;
+      filter: blur(80px);
+      opacity: .14;
+      background: #06b6d4;
+      top: -160px;
+      left: 15%;
+      animation: ambientFloat 10s ease-in-out infinite alternate;
+    }
+
+    .netra-ambient.two {
+      width: 360px;
+      height: 360px;
+      background: #6366f1;
+      left: auto;
+      right: -100px;
+      top: 38%;
+      animation-delay: -4s;
+    }
+
+    .netra-ambient.three {
+      width: 280px;
+      height: 280px;
+      background: #10b981;
+      left: 12%;
+      top: auto;
+      bottom: -120px;
+      animation-delay: -7s;
+    }
+
+    @keyframes ambientFloat {
+      0% { transform: translate3d(-20px, 0, 0) scale(.92); }
+      100% { transform: translate3d(35px, 48px, 0) scale(1.08); }
+    }
+
+    .netra-boot {
+      animation: netraBoot .72s cubic-bezier(.16,1,.3,1) both;
+    }
+
+    @keyframes netraBoot {
+      0% { opacity: 0; transform: translateY(18px) scale(.985); filter: blur(8px); }
+      100% { opacity: 1; transform: none; filter: blur(0); }
+    }
+
+    .netra-main-content {
+      animation: contentReveal .65s cubic-bezier(.16,1,.3,1) both;
+    }
+
+    @keyframes contentReveal {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    header {
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 12px 45px rgba(0,0,0,.18);
+    }
+
+    header::after {
+      content: "";
+      position: absolute;
+      left: -20%;
+      top: 0;
+      width: 40%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(34,211,238,.9), transparent);
+      box-shadow: 0 0 18px rgba(34,211,238,.65);
+      animation: headerBeam 5s ease-in-out infinite;
+    }
+
+    @keyframes headerBeam {
+      0%, 15% { left: -25%; opacity: 0; }
+      25% { opacity: 1; }
+      70% { left: 105%; opacity: 1; }
+      80%, 100% { left: 105%; opacity: 0; }
+    }
+
+    nav button {
+      position: relative;
+      overflow: hidden;
+      transition: transform .22s ease, color .22s ease, background .22s ease, box-shadow .22s ease !important;
+    }
+
+    nav button::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(100deg, transparent, rgba(255,255,255,.08), transparent);
+      transform: translateX(-120%);
+      transition: transform .5s ease;
+    }
+
+    nav button:hover::before { transform: translateX(120%); }
+    nav button:hover { transform: translateY(-1px); }
+
+    nav button[class*="bg-slate-800"] {
+      box-shadow: inset 0 0 18px rgba(34,211,238,.055), 0 0 18px rgba(34,211,238,.045);
+    }
+
+    .feature-card {
+      overflow: hidden;
+      transform-style: preserve-3d;
+      will-change: transform;
+    }
+
+    .feature-card::after {
+      content: "";
+      position: absolute;
+      inset: -80% -35%;
+      background: linear-gradient(
+        115deg,
+        transparent 35%,
+        rgba(255,255,255,.09) 47%,
+        rgba(34,211,238,.12) 50%,
+        transparent 58%
+      );
+      transform: translateX(-55%) rotate(8deg);
+      opacity: 0;
+      transition: opacity .2s ease, transform .75s cubic-bezier(.16,1,.3,1);
+      pointer-events: none;
+    }
+
+    .feature-card:hover::after {
+      opacity: 1;
+      transform: translateX(55%) rotate(8deg);
+    }
+
+    .feature-card > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-12px) scale(1.018);
+    }
+
+    .feature-name-box {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .feature-name-box::after {
+      content: "";
+      position: absolute;
+      top: -60%;
+      left: -120%;
+      width: 70%;
+      height: 220%;
+      transform: rotate(18deg);
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.16), transparent);
+      animation: badgeSweep 4.5s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    @keyframes badgeSweep {
+      0%, 65% { left: -120%; }
+      82% { left: 150%; }
+      100% { left: 150%; }
+    }
+
+    .netra-hero {
+      position: relative;
+    }
+
+    .netra-hero::before {
+      content: "";
+      position: absolute;
+      width: 620px;
+      height: 220px;
+      left: 50%;
+      top: 25%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: radial-gradient(ellipse, rgba(34,211,238,.11), transparent 68%);
+      filter: blur(18px);
+      pointer-events: none;
+      animation: heroPulse 4s ease-in-out infinite;
+    }
+
+    @keyframes heroPulse {
+      0%, 100% { opacity: .55; transform: translate(-50%, -50%) scale(.92); }
+      50% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+    }
+
+    .welcome-letter {
+      will-change: transform, filter;
+    }
+
+    .welcome-letter:nth-child(2n) { animation: letterFloat 3.8s ease-in-out infinite; }
+    .welcome-letter:nth-child(3n) { animation: letterFloat 4.3s ease-in-out -.8s infinite; }
+
+    @keyframes letterFloat {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-3px); }
+    }
+
+    .netra-metric {
+      position: relative;
+      overflow: hidden;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.04),
+        0 18px 45px rgba(0,0,0,.22);
+    }
+
+    .netra-metric::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, transparent 20%, rgba(34,211,238,.08), transparent 80%);
+      animation: metricSweep 3.5s linear infinite;
+      pointer-events: none;
+    }
+
+    @keyframes metricSweep {
+      from { transform: translateX(-100%); }
+      to { transform: translateX(100%); }
+    }
+
+    .netra-sos {
+      position: relative;
+      isolation: isolate;
+      overflow: hidden;
+      box-shadow: 0 12px 35px rgba(34,211,238,.13);
+      transition: transform .22s ease, box-shadow .22s ease, filter .22s ease !important;
+    }
+
+    .netra-sos::before {
+      content: "";
+      position: absolute;
+      inset: -2px;
+      z-index: -1;
+      border-radius: inherit;
+      padding: 1px;
+      background: linear-gradient(90deg, #22d3ee, #818cf8, #10b981, #22d3ee);
+      background-size: 300% 100%;
+      animation: borderFlow 4s linear infinite;
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+    }
+
+    .netra-sos:hover {
+      transform: translateY(-3px) scale(1.025);
+      box-shadow: 0 18px 45px rgba(34,211,238,.22);
+      filter: brightness(1.08);
+    }
+
+    @keyframes borderFlow {
+      to { background-position: 300% 0; }
+    }
+
+    .netra-alert {
+      animation: threatEntrance .5s cubic-bezier(.16,1,.3,1) both, threatGlow 1.25s ease-in-out infinite;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .netra-alert::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: -25%;
+      width: 20%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.12), transparent);
+      transform: skewX(-18deg);
+      animation: alertSweep 1.7s linear infinite;
+    }
+
+    @keyframes threatEntrance {
+      from { opacity: 0; transform: translateY(-12px) scale(.98); }
+      to { opacity: 1; transform: none; }
+    }
+
+    @keyframes threatGlow {
+      0%, 100% { box-shadow: 0 0 0 rgba(239,68,68,0); }
+      50% { box-shadow: 0 0 32px rgba(239,68,68,.16); }
+    }
+
+    @keyframes alertSweep {
+      from { left: -25%; }
+      to { left: 125%; }
+    }
+
+    .netra-processing {
+      background-image: linear-gradient(90deg, transparent, rgba(245,158,11,.12), transparent);
+      background-size: 200% 100%;
+      animation: processingFlow 1.5s linear infinite;
+    }
+
+    @keyframes processingFlow {
+      from { background-position: -100% 0; }
+      to { background-position: 100% 0; }
+    }
+
+    .netra-panel {
+      position: relative;
+      overflow: hidden;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.025),
+        0 20px 60px rgba(0,0,0,.16);
+      transition: transform .35s ease, border-color .35s ease, box-shadow .35s ease;
+    }
+
+    .netra-panel::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 8%;
+      right: 8%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(34,211,238,.5), transparent);
+      opacity: .55;
+    }
+
+    .netra-panel:hover {
+      transform: translateY(-3px);
+      border-color: rgba(34,211,238,.18);
+      box-shadow: 0 24px 70px rgba(0,0,0,.22);
+    }
+
+    .netra-camera-frame {
+      box-shadow:
+        inset 0 0 0 1px rgba(34,211,238,.08),
+        inset 0 0 50px rgba(0,0,0,.5),
+        0 20px 55px rgba(0,0,0,.3);
+    }
+
+    .netra-camera-frame::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 2px;
+      top: -3px;
+      z-index: 10;
+      background: linear-gradient(90deg, transparent, rgba(34,211,238,.85), transparent);
+      box-shadow: 0 0 16px rgba(34,211,238,.8);
+      animation: cameraScan 3s linear infinite;
+      pointer-events: none;
+    }
+
+    .netra-camera-frame::after {
+      content: "● REC   NETRA VISION";
+      position: absolute;
+      right: 12px;
+      top: 10px;
+      z-index: 10;
+      padding: 4px 8px;
+      border: 1px solid rgba(34,211,238,.18);
+      border-radius: 6px;
+      background: rgba(2,6,23,.72);
+      color: rgba(103,232,249,.8);
+      font: 9px/1 monospace;
+      letter-spacing: .08em;
+      backdrop-filter: blur(8px);
+      pointer-events: none;
+    }
+
+    @keyframes cameraScan {
+      0% { top: -3px; opacity: 0; }
+      8% { opacity: 1; }
+      92% { opacity: 1; }
+      100% { top: calc(100% + 3px); opacity: 0; }
+    }
+
+    .netra-live-dot {
+      box-shadow: 0 0 0 0 rgba(239,68,68,.55);
+      animation: liveRing 1.8s infinite;
+    }
+
+    @keyframes liveRing {
+      0% { box-shadow: 0 0 0 0 rgba(239,68,68,.55); }
+      70% { box-shadow: 0 0 0 9px rgba(239,68,68,0); }
+      100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+    }
+
+    .netra-input {
+      transition: border-color .25s ease, box-shadow .25s ease, transform .2s ease !important;
+    }
+
+    .netra-input:focus {
+      transform: translateY(-1px);
+      box-shadow: 0 0 0 3px rgba(34,211,238,.07), 0 10px 30px rgba(0,0,0,.18);
+    }
+
+    .netra-log-row {
+      animation: logIn .45s cubic-bezier(.16,1,.3,1) both;
+      transition: transform .22s ease, filter .22s ease;
+    }
+
+    .netra-log-row:hover {
+      transform: translateX(5px);
+      filter: brightness(1.08);
+    }
+
+    @keyframes logIn {
+      from { opacity: 0; transform: translateX(-12px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    .netra-back {
+      transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease !important;
+    }
+
+    .netra-back:hover {
+      transform: translateX(-3px) translateY(-2px) !important;
+      box-shadow: 0 12px 30px rgba(34,211,238,.09);
+    }
+
+    .netra-status {
+      animation: statusIn .45s cubic-bezier(.16,1,.3,1) both;
+    }
+
+    @keyframes statusIn {
+      from { opacity: 0; transform: scale(.94); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .netra-status-dot {
+      position: relative;
+    }
+
+    .netra-status-dot::after {
+      content: "";
+      position: absolute;
+      inset: -5px;
+      border-radius: 50%;
+      border: 1px solid currentColor;
+      opacity: .3;
+      animation: statusPing 1.8s infinite;
+    }
+
+    @keyframes statusPing {
+      0% { transform: scale(.65); opacity: .45; }
+      80%, 100% { transform: scale(1.45); opacity: 0; }
+    }
+
+    .netra-footer {
+      position: relative;
+    }
+
+    .netra-footer::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 15%;
+      right: 15%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(34,211,238,.25), transparent);
+    }
+
+    .netra-reduced-motion *,
+    .netra-reduced-motion *::before,
+    .netra-reduced-motion *::after {
+      animation-duration: .001ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: .001ms !important;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .netra-shell *,
+      .netra-shell *::before,
+      .netra-shell *::after {
+        animation-duration: .001ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .netra-ambient { opacity: .08; }
+      .netra-shell::before { background-size: 34px 34px; }
+      .netra-hero::before { width: 360px; }
+    }
+    /* =====================================================
+       NETRA // UI UX PRO MAX — MOTION OVERDRIVE
+       High-intensity cinematic layer.
+       ===================================================== */
+
+    :root {
+      --netra-mx: 0;
+      --netra-my: 0;
+      --netra-cursor-x: 50%;
+      --netra-cursor-y: 50%;
+    }
+
+    .netra-shell {
+      --parallax-x: calc(var(--netra-mx) * 10px);
+      --parallax-y: calc(var(--netra-my) * 8px);
+    }
+
+    .netra-cursor-aura {
+      position: fixed;
+      z-index: -1;
+      left: var(--netra-cursor-x);
+      top: var(--netra-cursor-y);
+      width: 280px;
+      height: 280px;
+      transform: translate(-50%, -50%);
+      border-radius: 999px;
+      pointer-events: none;
+      background: radial-gradient(circle, rgba(34,211,238,.14), rgba(34,211,238,.035) 30%, transparent 70%);
+      filter: blur(8px);
+      mix-blend-mode: screen;
+      transition: left .18s ease-out, top .18s ease-out;
+    }
+
+    .netra-corner {
+      position: fixed;
+      width: 86px;
+      height: 86px;
+      z-index: 75;
+      pointer-events: none;
+      opacity: .28;
+      filter: drop-shadow(0 0 8px rgba(34,211,238,.35));
+    }
+    .netra-corner-tl { left: 16px; top: 16px; border-left: 1px solid rgba(34,211,238,.8); border-top: 1px solid rgba(34,211,238,.8); }
+    .netra-corner-tr { right: 16px; top: 16px; border-right: 1px solid rgba(34,211,238,.8); border-top: 1px solid rgba(34,211,238,.8); }
+    .netra-corner-bl { left: 16px; bottom: 16px; border-left: 1px solid rgba(34,211,238,.8); border-bottom: 1px solid rgba(34,211,238,.8); }
+    .netra-corner-br { right: 16px; bottom: 16px; border-right: 1px solid rgba(34,211,238,.8); border-bottom: 1px solid rgba(34,211,238,.8); }
+    .netra-corner::after {
+      content: ""; position: absolute; width: 28px; height: 1px; background: var(--netra-cyan);
+      box-shadow: 0 0 12px var(--netra-cyan); animation: hudCornerPulse 2.5s ease-in-out infinite;
+    }
+    .netra-corner-tl::after { left: 8px; top: 8px; transform-origin: left; }
+    .netra-corner-tr::after { right: 8px; top: 8px; transform-origin: right; }
+    .netra-corner-bl::after { left: 8px; bottom: 8px; transform-origin: left; }
+    .netra-corner-br::after { right: 8px; bottom: 8px; transform-origin: right; }
+    @keyframes hudCornerPulse { 0%,100% { transform: scaleX(.35); opacity: .2; } 50% { transform: scaleX(1); opacity: 1; } }
+
+    .netra-hud-line {
+      position: fixed; z-index: 74; pointer-events: none; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(34,211,238,.65), transparent);
+      box-shadow: 0 0 12px rgba(34,211,238,.35); opacity: .18;
+    }
+    .netra-hud-line-a { width: 34vw; left: 3vw; top: 18%; animation: hudRailA 8s ease-in-out infinite; }
+    .netra-hud-line-b { width: 26vw; right: 4vw; bottom: 19%; animation: hudRailB 10s ease-in-out infinite; }
+    @keyframes hudRailA { 0%,100% { transform: translateX(-30%); opacity: .06; } 50% { transform: translateX(20%); opacity: .35; } }
+    @keyframes hudRailB { 0%,100% { transform: translateX(25%); opacity: .05; } 50% { transform: translateX(-20%); opacity: .3; } }
+
+    .netra-particle-field { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; opacity: .7; }
+    .netra-particle-field span {
+      position: absolute; width: 2px; height: 2px; left: calc((var(--i) * 17) % 100 * 1%); top: calc((var(--i) * 29) % 100 * 1%);
+      border-radius: 50%; background: rgba(103,232,249,.8); box-shadow: 0 0 10px rgba(34,211,238,.7);
+      animation: particleFloat calc(5s + (var(--i) % 5) * 1.2s) ease-in-out infinite alternate; animation-delay: calc(var(--i) * -.55s);
+    }
+    @keyframes particleFloat {
+      0% { transform: translate3d(calc(var(--netra-mx) * -8px), 12px, 0) scale(.6); opacity: .1; }
+      50% { opacity: .85; }
+      100% { transform: translate3d(calc(var(--netra-mx) * 14px), -42px, 0) scale(1.4); opacity: .15; }
+    }
+
+    .netra-radar {
+      position: fixed; width: 190px; height: 190px; right: 22px; bottom: 26px; z-index: 10; pointer-events: none; opacity: .11;
+      transform: translate3d(var(--parallax-x), var(--parallax-y), 0); transition: transform .25s ease-out;
+    }
+    .netra-radar::before {
+      content: ""; position: absolute; inset: 0; border-radius: 50%;
+      background: repeating-radial-gradient(circle, transparent 0 25px, rgba(34,211,238,.55) 26px 27px);
+      mask-image: radial-gradient(circle, black 0 50%, transparent 72%);
+    }
+    .netra-radar::after { content: ""; position: absolute; inset: 50% 0 auto; height: 1px; background: linear-gradient(90deg, transparent, rgba(34,211,238,.7), transparent); }
+    .netra-radar-ring { position: absolute; inset: 50%; border: 1px solid rgba(34,211,238,.45); border-radius: 50%; transform: translate(-50%,-50%); animation: radarRing 3.8s ease-out infinite; }
+    .netra-radar-ring.ring-1 { width: 34px; height: 34px; }
+    .netra-radar-ring.ring-2 { width: 88px; height: 88px; animation-delay: -1.2s; }
+    .netra-radar-ring.ring-3 { width: 150px; height: 150px; animation-delay: -2.4s; }
+    @keyframes radarRing { 0%,100% { opacity: .08; transform: translate(-50%,-50%) scale(.86); } 45% { opacity: .55; } 70% { opacity: .1; transform: translate(-50%,-50%) scale(1.04); } }
+    .netra-radar-sweep { position: absolute; left: 50%; top: 50%; width: 88px; height: 1px; transform-origin: left center; background: linear-gradient(90deg, rgba(34,211,238,.95), transparent); box-shadow: 0 0 12px rgba(34,211,238,.8); animation: radarSweep 3.2s linear infinite; }
+    @keyframes radarSweep { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+    .netra-panel {
+      position: relative; overflow: hidden;
+      transform: translate3d(calc(var(--netra-mx) * -1.5px), calc(var(--netra-my) * -1px), 0);
+      transition: transform .28s ease-out, border-color .3s ease, box-shadow .3s ease;
+    }
+    .netra-panel::before {
+      content: ""; position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(circle at var(--netra-cursor-x) var(--netra-cursor-y), rgba(34,211,238,.10), transparent 32%);
+      opacity: 0; transition: opacity .35s ease;
+    }
+    .netra-panel:hover::before { opacity: 1; }
+    .netra-panel::after {
+      content: ""; position: absolute; left: -30%; top: 0; width: 18%; height: 100%; transform: skewX(-18deg);
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.06), transparent); animation: panelSweep 7s ease-in-out infinite; pointer-events: none;
+    }
+    @keyframes panelSweep { 0%,70% { left:-30%; opacity:0; } 78% { opacity:1; } 92% { left:125%; opacity:0; } 100% { left:125%; opacity:0; } }
+
+    .netra-metric { position: relative; overflow: hidden; animation: metricBreath 3.4s ease-in-out infinite; }
+    .netra-metric::after {
+      content: ""; position: absolute; left: -120%; top: 0; width: 60%; height: 100%; transform: skewX(-20deg);
+      background: linear-gradient(90deg, transparent, rgba(34,211,238,.12), transparent); animation: metricSweep 4.2s ease-in-out infinite;
+    }
+    @keyframes metricBreath { 0%,100% { box-shadow: inset 0 0 25px rgba(34,211,238,.03), 0 0 15px rgba(34,211,238,.02); } 50% { box-shadow: inset 0 0 30px rgba(34,211,238,.09), 0 0 30px rgba(34,211,238,.07); } }
+    @keyframes metricSweep { 0%,55% { left:-120%; } 80% { left:150%; } 100% { left:150%; } }
+
+    .netra-shell button:active { transform: scale(.96) !important; transition-duration: .08s !important; }
+    .netra-shell input, .netra-shell textarea, .netra-shell select { transition: border-color .25s ease, box-shadow .25s ease, transform .25s ease, background .25s ease; }
+    .netra-shell input:focus, .netra-shell textarea:focus, .netra-shell select:focus { transform: translateY(-1px); box-shadow: 0 0 0 1px rgba(34,211,238,.15), 0 0 22px rgba(34,211,238,.08); }
+
+    @media (max-width: 768px) { .netra-corner, .netra-hud-line, .netra-radar { display:none; } .netra-cursor-aura { width:180px; height:180px; } }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; scroll-behavior:auto !important; transition-duration:.01ms !important; }
+      .netra-cursor-aura, .netra-radar, .netra-particle-field { display:none !important; }
+    }
+
+
+
+    /* =====================================================
+       NETRA // APEX COMMAND CENTER EXTENSION
+       High-end motion + interaction layer
+       ===================================================== */
+    .netra-apex-orbit { position:fixed; width:320px; height:320px; right:-105px; top:22%; border:1px solid rgba(34,211,238,.13); border-radius:50%; pointer-events:none; z-index:1; animation: apexOrbit 18s linear infinite; }
+    .netra-apex-orbit::before,.netra-apex-orbit::after{content:"";position:absolute;inset:26px;border:1px dashed rgba(129,140,248,.16);border-radius:50%;}
+    .netra-apex-orbit::after{inset:78px;border-style:solid;border-color:rgba(16,185,129,.16);animation:apexSpin 9s linear infinite reverse;}
+    @keyframes apexOrbit{to{transform:rotate(360deg)}}
+    @keyframes apexSpin{to{transform:rotate(-360deg)}}
+    .netra-telemetry-rail{position:fixed;left:18px;bottom:22px;z-index:70;width:220px;padding:10px 12px;border:1px solid rgba(34,211,238,.18);background:rgba(2,6,23,.72);backdrop-filter:blur(14px);border-radius:14px;box-shadow:0 0 30px rgba(34,211,238,.06),inset 0 0 20px rgba(34,211,238,.025);pointer-events:none;}
+    .netra-telemetry-title{font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.18em;color:#67e8f9;display:flex;justify-content:space-between;margin-bottom:8px;}
+    .netra-telemetry-bars{height:24px;display:flex;align-items:flex-end;gap:3px;overflow:hidden;}
+    .netra-telemetry-bars i{display:block;width:3px;border-radius:4px 4px 0 0;background:linear-gradient(to top,#06b6d4,#818cf8);animation:telemetryPulse .7s ease-in-out infinite alternate;opacity:.8;}
+    .netra-telemetry-bars i:nth-child(2n){animation-delay:-.25s}.netra-telemetry-bars i:nth-child(3n){animation-delay:-.45s}.netra-telemetry-bars i:nth-child(4n){animation-delay:-.1s}
+    @keyframes telemetryPulse{from{height:4px;opacity:.35}to{height:23px;opacity:1}}
+    .netra-command-chip{position:relative;overflow:hidden;isolation:isolate;}
+    .netra-command-chip::after{content:"";position:absolute;top:0;bottom:0;left:-70%;width:45%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.22),transparent);transform:skewX(-20deg);animation:commandSweep 3.2s ease-in-out infinite;pointer-events:none;}
+    @keyframes commandSweep{0%,55%{left:-70%}100%{left:135%}}
+    .netra-hud-corners{position:absolute;inset:0;pointer-events:none;border-radius:inherit;overflow:hidden;}
+    .netra-hud-corners::before,.netra-hud-corners::after{content:"";position:absolute;width:34px;height:34px;border-color:rgba(34,211,238,.7);border-style:solid;filter:drop-shadow(0 0 7px rgba(34,211,238,.45));}
+    .netra-hud-corners::before{left:10px;top:10px;border-width:2px 0 0 2px}.netra-hud-corners::after{right:10px;bottom:10px;border-width:0 2px 2px 0;}
+    .netra-apex-panel{position:relative;overflow:hidden;transform:translateZ(0);}
+    .netra-apex-panel::before{content:"";position:absolute;inset:-2px;background:conic-gradient(from 0deg,transparent 0 55%,rgba(34,211,238,.28),transparent 70%);animation:apexBorderSpin 5s linear infinite;z-index:-1;}
+    .netra-apex-panel::after{content:"";position:absolute;left:-20%;right:-20%;height:1px;top:0;background:linear-gradient(90deg,transparent,#22d3ee,transparent);box-shadow:0 0 18px #22d3ee;animation:apexScan 3.8s ease-in-out infinite;pointer-events:none;}
+    @keyframes apexBorderSpin{to{transform:rotate(360deg)}}
+    @keyframes apexScan{0%,100%{top:2% ;opacity:0}15%{opacity:1}80%{top:98%;opacity:.7}}
+    .netra-metric-live{animation:metricBreathe 2.4s ease-in-out infinite;}
+    @keyframes metricBreathe{0%,100%{box-shadow:0 0 0 rgba(34,211,238,0)}50%{box-shadow:0 0 32px rgba(34,211,238,.13),inset 0 0 22px rgba(34,211,238,.04)}}
+    .netra-danger-pulse{animation:dangerPulse 1.25s ease-in-out infinite;}
+    @keyframes dangerPulse{0%,100%{box-shadow:0 0 10px rgba(239,68,68,.08)}50%{box-shadow:0 0 42px rgba(239,68,68,.3),inset 0 0 25px rgba(239,68,68,.08)}}
+    .netra-page-enter{animation:apexPage .72s cubic-bezier(.16,1,.3,1) both;}
+    @keyframes apexPage{from{opacity:0;transform:translateY(18px) scale(.985);filter:blur(8px)}to{opacity:1;transform:none;filter:none}}
+    .netra-hover-3d{transition:transform .45s cubic-bezier(.2,.8,.2,1),box-shadow .45s ease;transform-style:preserve-3d;}
+    .netra-hover-3d:hover{transform:perspective(900px) rotateX(2deg) rotateY(-2deg) translateY(-8px);}
+    .netra-kicker{font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.22em;text-transform:uppercase;color:rgba(148,163,184,.7);}
+    .netra-data-dot{width:5px;height:5px;border-radius:50%;background:#22d3ee;box-shadow:0 0 10px #22d3ee;animation:dataBlink 1.4s infinite;}
+    @keyframes dataBlink{0%,100%{opacity:.25;transform:scale(.7)}50%{opacity:1;transform:scale(1.2)}}
+    @media(max-width:768px){.netra-apex-orbit,.netra-telemetry-rail{display:none}.netra-hover-3d:hover{transform:translateY(-4px)}}
+
   `;
+
 
   // =========================================================
   // RENDER
   // =========================================================
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col">
+    <div className={`min-h-screen text-slate-100 font-sans flex flex-col netra-shell ${booted ? "netra-boot" : ""}`}>
+      <div className="netra-ambient" />
+      <div className="netra-ambient two" />
+      <div className="netra-ambient three" />
+      <div className="netra-cursor-aura" />
+      <div className="netra-corner netra-corner-tl" />
+      <div className="netra-corner netra-corner-tr" />
+      <div className="netra-corner netra-corner-bl" />
+      <div className="netra-corner netra-corner-br" />
+      <div className="netra-hud-line netra-hud-line-a" />
+      <div className="netra-hud-line netra-hud-line-b" />
+      <div className="netra-particle-field" aria-hidden="true">
+        {Array.from({ length: 18 }).map((_, index) => (
+          <span
+            key={index}
+            style={{
+              "--i": index,
+              left: `${(index * 17) % 100}%`,
+              top: `${(index * 29) % 100}%`,
+              width: `${1 + (index % 3)}px`,
+              height: `${1 + (index % 3)}px`,
+              animationDuration: `${5 + (index % 5) * 1.2}s`,
+              animationDelay: `${index * -0.55}s`,
+            }}
+          />
+        ))}
+      </div>
+      <div className="netra-radar" aria-hidden="true">
+        <span className="netra-radar-ring ring-1" />
+        <span className="netra-radar-ring ring-2" />
+        <span className="netra-radar-ring ring-3" />
+        <span className="netra-radar-sweep" />
+      </div>
 
       <style>{styles}</style>
+
+      {/* APEX COMMAND-CENTER AMBIENCE */}
+      <div className="netra-apex-orbit" aria-hidden="true" />
+      <div className="pointer-events-none fixed inset-0 z-[2] overflow-hidden" aria-hidden="true">
+        <div className="absolute left-[7%] top-[34%] w-px h-28 bg-gradient-to-b from-transparent via-cyan-400/30 to-transparent animate-pulse" />
+        <div className="absolute right-[8%] top-[55%] w-32 h-px bg-gradient-to-r from-transparent via-indigo-400/25 to-transparent" />
+        <div className="absolute left-[35%] top-[12%] w-44 h-px bg-gradient-to-r from-transparent via-cyan-400/20 to-transparent animate-pulse" />
+      </div>
+
+      <div className="netra-telemetry-rail hidden sm:block">
+        <div className="netra-telemetry-title"><span>LIVE TELEMETRY</span><span className="text-emerald-400">● SYNC</span></div>
+        <div className="netra-telemetry-bars" aria-hidden="true">
+          {Array.from({ length: 42 }, (_, i) => <i key={i} style={{height:`${6 + ((i * 17) % 18)}px`}} />)}
+        </div>
+        <div className="mt-2 flex justify-between font-mono text-[8px] text-slate-600"><span>VISION CORE</span><span>NEURAL LINK // ACTIVE</span></div>
+      </div>
 
       {/* ALERT OVERLAY */}
 
@@ -850,12 +1680,12 @@ function App() {
 
       {/* MAIN */}
 
-      <main className="max-w-7xl mx-auto px-6 py-10 flex-grow w-full">
+      <main className="max-w-7xl mx-auto px-6 py-10 flex-grow w-full netra-main-content netra-page-enter">
 
         {/* PROCESSING */}
 
         {isProcessing && (
-          <div className="mb-6 p-3.5 bg-amber-950/40 border border-amber-700/50 rounded-xl flex items-center gap-3">
+          <div className="mb-6 p-3.5 bg-amber-950/40 border border-amber-700/50 rounded-xl flex items-center gap-3 netra-processing">
 
             <span className="w-3 h-3 rounded-full bg-amber-500 animate-pulse" />
 
@@ -873,7 +1703,7 @@ function App() {
         {/* EMERGENCY */}
 
         {isAlertActive && (
-          <div className="mb-8 p-4 bg-red-950/60 border border-red-600/50 rounded-xl flex items-center justify-between">
+          <div className="mb-8 p-4 bg-red-950/60 border border-red-600/50 rounded-xl flex items-center justify-between netra-alert netra-danger-pulse">
 
             <div>
 
@@ -905,7 +1735,7 @@ function App() {
         {activePage === "dashboard" && (
           <div>
 
-            <div className="text-center my-10 max-w-4xl mx-auto">
+            <div className="text-center my-10 max-w-4xl mx-auto netra-hero">
 
               <div className="inline-block mb-5 px-4 py-1.5 bg-cyan-950/60 border border-cyan-800/50 rounded-full">
 
@@ -957,7 +1787,7 @@ function App() {
 
               {/* PERSON COUNT */}
 
-              <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-xl text-center mb-4 max-w-xs mx-auto">
+              <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-xl text-center mb-4 max-w-xs mx-auto netra-metric netra-metric-live netra-apex-panel netra-hover-3d">
 
                 <div className="text-slate-400 text-xs font-mono uppercase mb-1">
                   Persons Detected
@@ -983,7 +1813,7 @@ function App() {
                     setIsProcessing(false);
                   }
                 }}
-                className={`px-6 py-3 rounded-xl font-medium text-sm ${
+                className={`netra-sos netra-command-chip px-6 py-3 rounded-xl font-medium text-sm ${
                   isAlertActive
                     ? "bg-red-600 hover:bg-red-700 text-white"
                     : "bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold"
@@ -1004,7 +1834,7 @@ function App() {
 
               <div
                 onClick={() => setActivePage("yolo_detail")}
-                className="feature-card bg-slate-900/40 border border-slate-800 p-8 rounded-2xl min-h-[250px] flex flex-col justify-center hover:bg-slate-900/80 cursor-pointer"
+                className="feature-card netra-apex-panel netra-hover-3d bg-slate-900/40 border border-slate-800 p-8 rounded-2xl min-h-[250px] flex flex-col justify-center hover:bg-slate-900/80 cursor-pointer"
               >
 
                 <div className="feature-name-box camera-name-box">
@@ -1029,7 +1859,7 @@ function App() {
 
               <div
                 onClick={() => setActivePage("gesture_detail")}
-                className="feature-card bg-slate-900/40 border border-slate-800 p-8 rounded-2xl min-h-[250px] flex flex-col justify-center hover:bg-slate-900/80 cursor-pointer"
+                className="feature-card netra-apex-panel netra-hover-3d bg-slate-900/40 border border-slate-800 p-8 rounded-2xl min-h-[250px] flex flex-col justify-center hover:bg-slate-900/80 cursor-pointer"
               >
 
                 <div className="feature-name-box gesture-name-box">
@@ -1054,7 +1884,7 @@ function App() {
 
               <div
                 onClick={() => setActivePage("alerts_detail")}
-                className="feature-card bg-slate-900/40 border border-slate-800 p-8 rounded-2xl min-h-[250px] flex flex-col justify-center hover:bg-slate-900/80 cursor-pointer"
+                className="feature-card netra-apex-panel netra-hover-3d bg-slate-900/40 border border-slate-800 p-8 rounded-2xl min-h-[250px] flex flex-col justify-center hover:bg-slate-900/80 cursor-pointer"
               >
 
                 <div className="feature-name-box alert-name-box">
@@ -1143,7 +1973,7 @@ function App() {
 
             </div>
 
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 font-mono text-xs space-y-3">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 netra-panel font-mono text-xs space-y-3 netra-panel">
 
               {filteredLogs.length === 0 ? (
 
@@ -1157,7 +1987,7 @@ function App() {
 
                   <div
                     key={log.id}
-                    className={`p-3.5 border rounded-xl flex justify-between items-center ${
+                    className={`netra-log-row p-3.5 border rounded-xl flex justify-between items-center ${
                       log.type === "CRITICAL"
                         ? "bg-red-950/40 border-red-800/50 text-red-300"
                         : log.type === "WARNING"
@@ -1210,7 +2040,7 @@ function App() {
 
             {/* DROIDCAM INFO */}
 
-            <div className="bg-cyan-950/30 border border-cyan-800/50 rounded-2xl p-5">
+            <div className="bg-cyan-950/30 border border-cyan-800/50 rounded-2xl p-5 netra-panel">
 
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
 
@@ -1248,7 +2078,7 @@ function App() {
 
             {/* CONNECTION PANEL */}
 
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 netra-panel">
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
@@ -1267,7 +2097,7 @@ function App() {
                       handleCamera1UrlChange(e.target.value)
                     }
                     placeholder="http://192.168.1.2:4747/video"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-cyan-300 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500 font-mono text-xs"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 netra-input text-cyan-300 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500 font-mono text-xs"
                   />
 
                   <button
@@ -1299,7 +2129,7 @@ function App() {
                       handleCamera2UrlChange(e.target.value)
                     }
                     placeholder="http://192.168.1.X:8080/video"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-indigo-300 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 font-mono text-xs"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 netra-input text-indigo-300 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 font-mono text-xs"
                   />
 
                   <button
@@ -1349,7 +2179,7 @@ function App() {
 
               {/* CAMERA 1 */}
 
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 netra-panel">
 
                 <div className="flex items-center justify-between mb-4">
 
@@ -1399,13 +2229,13 @@ function App() {
 
                 </div>
 
-                <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-slate-800">
+                <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-slate-800 netra-camera-frame">
 
                   {camera1Url && camera1Refresh > 0 ? (
 
                     <img
                       key={`droidcam-${camera1Refresh}`}
-                      src={camera1Url}
+                      src={AI_RAW_FEED_URL}
                       alt="DroidCam Live Feed"
                       className="w-full h-full object-contain"
                       onLoad={handleCamera1Load}
@@ -1492,7 +2322,7 @@ function App() {
 
                     <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/70 px-3 py-1.5 rounded-lg">
 
-                      <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse netra-live-dot" />
 
                       <span className="text-red-400 text-[11px] font-mono font-bold">
                         LIVE
@@ -1564,7 +2394,7 @@ function App() {
 
               {/* CAMERA 2 */}
 
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 netra-panel">
 
                 <div className="flex items-center justify-between mb-4">
 
@@ -1614,7 +2444,7 @@ function App() {
 
                 </div>
 
-                <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-slate-800">
+                <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-slate-800 netra-camera-frame">
 
                   {camera2Url && camera2Refresh > 0 ? (
 
@@ -1729,6 +2559,147 @@ function App() {
 
             </div>
 
+            {/* AI PROCESSED FEED - FIX: this whole panel was missing in this
+                version. It shows the engine's actual output (YOLO boxes +
+                pose skeleton drawn on top of Camera #1's frames). */}
+
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 netra-panel">
+
+              <div className="flex items-center justify-between mb-4">
+
+                <div>
+
+                  <h3 className="text-white font-bold text-sm">
+                    AI Processed Feed
+                  </h3>
+
+                  <p className="text-slate-500 text-[11px] font-mono break-all">
+                    YOLO + pose detection on Camera #1
+                  </p>
+
+                </div>
+
+                <div
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${
+                    camera1Online && isApiConnected
+                      ? "bg-emerald-950/50 border border-emerald-700/40"
+                      : "bg-red-950/50 border border-red-700/40"
+                  }`}
+                >
+
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full ${
+                      camera1Online && isApiConnected
+                        ? "bg-emerald-500 animate-pulse"
+                        : "bg-red-500"
+                    }`}
+                  />
+
+                  <span
+                    className={`text-[11px] font-mono ${
+                      camera1Online && isApiConnected
+                        ? "text-emerald-400"
+                        : "text-red-400"
+                    }`}
+                  >
+                    {camera1Online && isApiConnected
+                      ? "PROCESSING"
+                      : camera1Connecting
+                        ? "CONNECTING"
+                        : "OFFLINE"}
+                  </span>
+
+                </div>
+
+              </div>
+
+              <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-slate-800 netra-camera-frame">
+
+                {camera1Refresh > 0 ? (
+
+                  <img
+                    key={`ai-feed-${camera1Refresh}`}
+                    src={AI_LIVE_FEED_URL}
+                    alt="AI Processed Feed"
+                    className="w-full h-full object-contain"
+                  />
+
+                ) : (
+
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+
+                    <div className="w-16 h-16 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center mb-4">
+
+                      <span className="text-slate-500 text-2xl">
+                        🧠
+                      </span>
+
+                    </div>
+
+                    <div className="text-slate-400 font-mono text-sm">
+                      AI FEED
+                    </div>
+
+                    <div className="text-slate-600 text-[11px] mt-1">
+                      Connect Camera #1 to start processing
+                    </div>
+
+                  </div>
+
+                )}
+
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 mt-4">
+
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-center">
+
+                  <div className="text-slate-500 text-[10px] font-mono">
+                    ENGINE
+                  </div>
+
+                  <div className="text-indigo-400 text-xs font-mono mt-1">
+                    YOLOv8-Pose
+                  </div>
+
+                </div>
+
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-center">
+
+                  <div className="text-slate-500 text-[10px] font-mono">
+                    PORT
+                  </div>
+
+                  <div className="text-indigo-400 text-xs font-mono mt-1">
+                    8001
+                  </div>
+
+                </div>
+
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-center">
+
+                  <div className="text-slate-500 text-[10px] font-mono">
+                    STATUS
+                  </div>
+
+                  <div
+                    className={`text-xs font-mono mt-1 ${
+                      camera1Online && isApiConnected
+                        ? "text-emerald-400"
+                        : "text-red-400"
+                    }`}
+                  >
+                    {camera1Online && isApiConnected
+                      ? "Processing"
+                      : "Offline"}
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+
           </div>
         )}
 
@@ -1762,7 +2733,7 @@ function App() {
 
             </div>
 
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 netra-panel space-y-6">
 
               <div className="p-4 bg-slate-950 rounded-xl border border-slate-800">
 
@@ -1859,7 +2830,7 @@ function App() {
 
             <div className="grid md:grid-cols-2 gap-6">
 
-              <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+              <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl netra-panel">
 
                 <h3 className="text-sm font-bold text-cyan-400 mb-3 text-center">
                   Model Specifications
@@ -1877,7 +2848,7 @@ function App() {
 
               </div>
 
-              <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+              <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl netra-panel">
 
                 <h3 className="text-sm font-bold text-emerald-400 mb-3 text-center">
                   Pipeline
@@ -1901,7 +2872,7 @@ function App() {
 
             <button
               onClick={() => setActivePage("dashboard")}
-              className="back-dashboard-btn absolute bottom-0 right-0 px-5 py-2.5 bg-slate-900 hover:bg-cyan-950 border border-slate-700 hover:border-cyan-500 text-cyan-400 rounded-xl text-xs font-mono"
+              className="back-dashboard-btn netra-back absolute bottom-0 right-0 px-5 py-2.5 bg-slate-900 hover:bg-cyan-950 border border-slate-700 hover:border-cyan-500 text-cyan-400 rounded-xl text-xs font-mono"
             >
               ← Back to Dashboard
             </button>
@@ -1920,7 +2891,7 @@ function App() {
               MediaPipe SOS Gesture Tracker
             </h2>
 
-            <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl font-mono text-xs text-slate-300 space-y-4">
+            <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl netra-panel font-mono text-xs text-slate-300 space-y-4">
 
               <div className="text-indigo-400 font-bold text-center">
                 [KEYPOINT LANDMARKS ACTIVE]
@@ -1938,7 +2909,7 @@ function App() {
 
             <button
               onClick={() => setActivePage("dashboard")}
-              className="back-dashboard-btn absolute bottom-0 right-0 px-5 py-2.5 bg-slate-900 hover:bg-indigo-950 border border-slate-700 hover:border-indigo-500 text-indigo-400 rounded-xl text-xs font-mono"
+              className="back-dashboard-btn netra-back absolute bottom-0 right-0 px-5 py-2.5 bg-slate-900 hover:bg-indigo-950 border border-slate-700 hover:border-indigo-500 text-indigo-400 rounded-xl text-xs font-mono"
             >
               ← Back to Dashboard
             </button>
@@ -1957,7 +2928,7 @@ function App() {
               Telegram & Webhook Dispatcher
             </h2>
 
-            <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl space-y-5 text-xs">
+            <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl netra-panel space-y-5 text-xs">
 
               <p className="text-slate-300 text-center">
                 Configure Telegram Bot details for emergency notifications.
@@ -1978,7 +2949,7 @@ function App() {
                       setBotToken(e.target.value)
                     }
                     placeholder="Enter bot token"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-cyan-300 focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 netra-input text-cyan-300 focus:outline-none focus:border-cyan-500"
                   />
 
                 </div>
@@ -1996,7 +2967,7 @@ function App() {
                       setChatId(e.target.value)
                     }
                     placeholder="-100xxxxxxxxxx"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-cyan-300 focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 netra-input text-cyan-300 focus:outline-none focus:border-cyan-500"
                   />
 
                 </div>
@@ -2029,7 +3000,7 @@ function App() {
 
             <button
               onClick={() => setActivePage("dashboard")}
-              className="back-dashboard-btn absolute bottom-0 right-0 px-5 py-2.5 bg-slate-900 hover:bg-emerald-950 border border-slate-700 hover:border-emerald-500 text-emerald-400 rounded-xl text-xs font-mono"
+              className="back-dashboard-btn netra-back absolute bottom-0 right-0 px-5 py-2.5 bg-slate-900 hover:bg-emerald-950 border border-slate-700 hover:border-emerald-500 text-emerald-400 rounded-xl text-xs font-mono"
             >
               ← Back to Dashboard
             </button>
@@ -2039,11 +3010,10 @@ function App() {
         )}
 
       </main>
-      <NetraFooter />
+      <div className="netra-footer"><NetraFooter /></div>
 
     </div>
   );
 }
 
 export default App;
-        
