@@ -7,6 +7,6 @@ echo Starting Frontend UI...
 start cmd /k "cd aryan_task && npm run dev"
 
 echo Starting Engine...
-start cmd /k "cd netra_unified_engine.py "
+start cmd /k "netra_unified_engine.py"
 echo System Launched Successfully.
 pause

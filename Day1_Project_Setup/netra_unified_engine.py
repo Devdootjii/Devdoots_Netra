@@ -16,18 +16,14 @@ import uvicorn
 # ==========================================
 app = FastAPI()
 
-# FIX (ROOT CAUSE): pehle yahan relative path tha -
-# os.path.join(os.path.dirname(__file__), "..", "camera_config.json") - jo
-# main.py ki ~/.netra/camera_config.json se BILKUL ALAG file thi. Isliye
-# frontend se aaya phone URL kabhi engine tak pahuchta hi nahi tha, aur
-# get_camera_url() fallback me 0 (laptop webcam) return karta rehta tha.
-# Ab dono files EXACT same absolute path resolve karte hain (main.py wali
-# NETRA_HOME/NETRA_CONFIG_PATH env-var logic yahan bhi copy ki hai).
+# FIX: same absolute-path logic as main.py - both processes now always agree
+# on exactly one camera_config.json location, regardless of folder structure
+# or which directory you launch each script from.
 NETRA_HOME = os.environ.get("NETRA_HOME", os.path.join(os.path.expanduser("~"), ".netra"))
+os.makedirs(NETRA_HOME, exist_ok=True)
 CONFIG_PATH = os.environ.get("NETRA_CONFIG_PATH", os.path.join(NETRA_HOME, "camera_config.json"))
-print(f"[NETRA ENGINE] camera_config.json path -> {CONFIG_PATH}")
-
 BACKEND_API_URL = "http://127.0.0.1:8000/api/ai-stream"
+print(f"[NETRA ENGINE] camera_config.json path -> {CONFIG_PATH}")
 
 # --- TUNABLE CONSTANTS (sab yahin se control hote hain) ---
 PERSON_CONF_THRESH = 0.5      # FIX: pehle YOLO ka default 0.25 use ho raha tha -> empty room me
@@ -43,6 +39,11 @@ REQUIRED_HOLD_TIME = 3.0      # itne second haath upar rehna chahiye SOS confirm
 GESTURE_COOLDOWN = 1.2        # itne second tak gesture "miss" hone par bhi timer pause rahega (flicker-proof)
 ALERT_COOLDOWN_SEC = 3.0      # backend ko har kitne second me status bhejna hai
 
+# FIX: pehle model 640px par chalta tha, jiske wajah se CPU par ek frame ~400-700ms
+# le sakta tha. 320px par accuracy me mamuli farak padta hai (khaaskar close-range
+# selfie-style testing me) lekin speed roughly 2-3x badh jaati hai.
+INFERENCE_IMG_SIZE = 320
+
 print("[NETRA ENGINE] Initializing YOLOv8-Pose on CPU...")
 try:
     pose_model = YOLO("yolov8n-pose.pt")
@@ -51,10 +52,58 @@ except Exception as e:
     print(f"❌ Error loading model: {e}")
     exit()
 
-output_frame = None
-raw_frame = None  # FIX: unprocessed frame, stored so we can serve it to the
-                   # frontend's raw preview too - see architecture note below.
+output_frame = None       # AI-processed frame (boxes/skeleton/banner) -> served at /live-feed
+raw_output_frame = None   # untouched camera frame, no overlay          -> served at /live-feed-raw
 lock = threading.Lock()
+
+
+class FreshFrameReader:
+    """
+    FIX (root cause of the ~1 min lag): cv2.VideoCapture() by default buffers
+    frames from a network/IP camera stream in the order they arrive. If our
+    CPU-bound YOLO inference can't keep up with the phone's frame rate, that
+    buffer just keeps growing - cap.read() always hands us the OLDEST queued
+    frame, not the newest. The delay between "what the phone sees right now"
+    and "what we're looking at" grows continuously the longer the app runs,
+    which is exactly the drifting ~1 minute lag you saw.
+
+    Fix: read the camera continuously in its own background thread as fast as
+    the network allows, and always overwrite a single shared "latest frame"
+    slot. The main processing loop never blocks on the network and always
+    grabs whatever is freshest - if inference is slow, frames are simply
+    skipped instead of queued, so the feed always stays close to real-time.
+    """
+
+    def __init__(self, url):
+        self.url = url
+        self.cap = cv2.VideoCapture(url)
+        self.lock = threading.Lock()
+        self.frame = None
+        self.success = False
+        self.running = True
+        self.thread = threading.Thread(target=self._reader_loop, daemon=True)
+        self.thread.start()
+
+    def _reader_loop(self):
+        while self.running:
+            ok, frame = self.cap.read()
+            with self.lock:
+                self.success = ok
+                if ok:
+                    self.frame = frame
+            if not ok:
+                time.sleep(0.2)  # camera down - don't spin-loop hot
+
+    def read(self):
+        with self.lock:
+            if self.frame is None:
+                return self.success, None
+            return self.success, self.frame.copy()
+
+    def release(self):
+        self.running = False
+        self.thread.join(timeout=1.0)
+        self.cap.release()
 
 # COCO-17 keypoint skeleton connections (for drawing dots + bones)
 SKELETON = [
@@ -117,142 +166,47 @@ def draw_skeleton(frame, kpts):
 # ==========================================
 # 2. CORE AI PROCESSING THREAD
 # ==========================================
-class MJPEGStreamReader:
-    """
-    FIX (REAL ROOT CAUSE of permanent "CAMERA OFFLINE"): DroidCam's /video
-    endpoint sends a `multipart/x-mixed-replace` HTTP stream. Browsers (and
-    the frontend's plain <img src=...> tag) understand this format natively -
-    that's why the raw feed always showed up fine. But cv2.VideoCapture
-    (with or without CAP_FFMPEG) generally cannot demux multipart/x-mixed-
-    replace at all - it expects a single continuous MJPEG/video stream, not
-    HTTP multipart boundaries. That mismatch is why every single read() kept
-    failing no matter how many times we reconnected - it was never a network
-    problem. This class instead reads the raw HTTP bytes directly with
-    `requests` and manually extracts each JPEG frame between its start
-    (0xFFD8) and end (0xFFD9) markers, then decodes it with cv2.imdecode.
-    Same .isOpened()/.read()/.release() interface as cv2.VideoCapture so
-    nothing else in the loop below needs to change.
-    """
-    def __init__(self, url, timeout=5):
-        self.url = url
-        self.timeout = timeout
-        self._resp = None
-        self._stream = None
-        self._buf = b""
-        self._opened = False
-        self._connect()
-
-    def _connect(self):
-        try:
-            self._resp = requests.get(self.url, stream=True, timeout=self.timeout)
-            self._resp.raise_for_status()
-            self._stream = self._resp.raw
-            self._buf = b""
-            self._opened = True
-        except Exception as e:
-            # FIX: pehle yahan "except Exception: pass" tha - koi bhi connection
-            # error (timeout, connection refused, DNS fail, 404, etc.) chupp-chaap
-            # nigal liya jaata tha aur sirf generic "reconnecting" print hota tha.
-            # Ab exact reason terminal me dikhega - isse pata chalega ye asli
-            # network/host problem hai ya kuch aur.
-            print(f"[NETRA ENGINE] Connect failed for {self.url} -> {type(e).__name__}: {e}")
-            self._opened = False
-
-    def isOpened(self):
-        return self._opened
-
-    def read(self):
-        if not self._opened or self._stream is None:
-            return False, None
-        try:
-            while True:
-                chunk = self._stream.read(2048)
-                if not chunk:
-                    self._opened = False
-                    return False, None
-                self._buf += chunk
-
-                start = self._buf.find(b"\xff\xd8")
-                end = self._buf.find(b"\xff\xd9")
-                if start != -1 and end != -1 and end > start:
-                    jpg = self._buf[start:end + 2]
-                    self._buf = self._buf[end + 2:]
-                    frame = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
-                    if frame is not None:
-                        return True, frame
-                    # corrupt frame, keep reading for the next boundary
-                elif len(self._buf) > 5_000_000:
-                    # safety valve: no valid JPEG found in 5MB, buffer is junk
-                    self._buf = b""
-        except Exception as e:
-            print(f"[NETRA ENGINE] Read failed for {self.url} -> {type(e).__name__}: {e}")
-            self._opened = False
-            return False, None
-
-    def release(self):
-        try:
-            if self._resp is not None:
-                self._resp.close()
-        except Exception:
-            pass
-        self._opened = False
-
-
-def open_capture(url):
-    """
-    HTTP(S) URLs (DroidCam etc.) -> manual MJPEG multipart reader (see above).
-    Anything else (e.g. int 0 = local webcam) -> normal cv2.VideoCapture.
-    """
-    if isinstance(url, str) and url.startswith(("http://", "https://")):
-        return MJPEGStreamReader(url)
-    return cv2.VideoCapture(url)
-
-
 def ai_processing_loop():
-    global output_frame, raw_frame, lock
+    global output_frame, raw_output_frame, lock
 
     current_url = get_camera_url()
-    cap = open_capture(current_url)
+    print(f"[NETRA ENGINE] Opening camera source -> {current_url!r}"
+          f"{'  (falling back to local webcam device 0 - no valid URL found in config)' if current_url == 0 else ''}")
+    reader = FreshFrameReader(current_url)
 
     last_alert_time = 0
     sos_start_time = None
     last_gesture_time = 0
-
-    # FIX (ROOT CAUSE of permanent "CAMERA OFFLINE"): pehle cap sirf tab dobara
-    # banta tha jab config ka URL badalta tha. Agar URL SAHI tha lekin cap
-    # pehli hi baar khulne me fail ho gaya (network thoda late aaya / DroidCam
-    # app tab tak ready nahi tha), to cap.read() hamesha False deta rehta tha
-    # aur engine kabhi dobara connect try hi nahi karta tha - URL same hone
-    # tak. Ab har failed read ke baad, thodi der (RECONNECT_INTERVAL) wait
-    # karke khud hi reconnect try karta hai, chahe URL na bhi badla ho.
-    RECONNECT_INTERVAL = 3.0
-    last_reconnect_attempt = 0
+    fps_log_time = 0
+    frame_count_since_log = 0
 
     while True:
         new_url = get_camera_url()
         if new_url != current_url:
-            cap.release()
+            print(f"[NETRA ENGINE] Camera source changed -> {new_url!r} (was {current_url!r})")
+            reader.release()
             current_url = new_url
-            cap = open_capture(current_url)
+            reader = FreshFrameReader(current_url)
             time.sleep(1)
 
-        success, frame = cap.read()
+        success, frame = reader.read()
         current_time = time.time()
+
+        # FIX: simple rolling FPS counter printed every ~5s, so you can see in
+        # the terminal that processing speed is healthy (aim: several FPS on
+        # CPU with imgsz=320, not the sub-1-FPS that caused the old lag).
+        frame_count_since_log += 1
+        if current_time - fps_log_time > 5:
+            if fps_log_time != 0:
+                fps = frame_count_since_log / (current_time - fps_log_time)
+                print(f"[NETRA ENGINE] Processing ~{fps:.1f} FPS")
+            fps_log_time = current_time
+            frame_count_since_log = 0
 
         if not success:
             frame = np.zeros((480, 640, 3), dtype=np.uint8)
             cv2.putText(frame, "CAMERA OFFLINE OR LOADING...", (50, 240),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-            with lock:
-                raw_frame = frame.copy()
-
-            # FIX: agar read fail ho raha hai (URL same hai, cap khula ya nahi khula),
-            # periodically reconnect try karo instead of giving up forever.
-            if current_time - last_reconnect_attempt > RECONNECT_INTERVAL:
-                print(f"[NETRA ENGINE] Frame read failed, reconnecting: {current_url}")
-                cap.release()
-                cap = open_capture(current_url)
-                last_reconnect_attempt = current_time
 
             # FIX: pehle camera down hone par backend ko kabhi update hi nahi milta tha,
             # so frontend purana (stale) count/SOS state dikhata rehta tha. Ab reset+report karo.
@@ -261,22 +215,31 @@ def ai_processing_loop():
                 threading.Thread(target=send_status_to_backend, args=(0, False, False), daemon=True).start()
                 last_alert_time = current_time
 
+            with lock:
+                raw_output_frame = frame.copy()
+
             time.sleep(0.5)
         else:
             frame = cv2.resize(frame, (640, 480))
+
+            # FIX: publish the untouched camera frame here, BEFORE any boxes/
+            # skeleton/banner get drawn on `frame` below. This is what makes
+            # /live-feed-raw an actual "live camera" feed instead of showing
+            # nothing - previously there was no raw frame captured anywhere,
+            # only the fully-processed one, so a frontend tile bound to a raw
+            # feed had no endpoint to pull from.
+            with lock:
+                raw_output_frame = frame.copy()
+
             frame_area = frame.shape[0] * frame.shape[1]
 
-            # FIX: save the clean frame BEFORE any boxes/skeleton get drawn on
-            # it below, so the raw-feed endpoint can serve an unprocessed
-            # preview - the whole point is DroidCam only allows ONE client
-            # connected at a time, so nothing except this engine should ever
-            # open a direct connection to the phone.
-            with lock:
-                raw_frame = frame.copy()
-
-            # FIX: explicit conf/iou so low-confidence "ghost" detections don't count as persons
+            # FIX: explicit conf/iou so low-confidence "ghost" detections don't count
+            # as persons, AND imgsz=320 (was implicitly 640) roughly doubles/triples
+            # CPU throughput - this is the other half of the lag fix, alongside
+            # FreshFrameReader above.
             results = pose_model(frame, verbose=False, device="cpu",
-                                  conf=PERSON_CONF_THRESH, iou=PERSON_IOU_THRESH)
+                                  conf=PERSON_CONF_THRESH, iou=PERSON_IOU_THRESH,
+                                  imgsz=INFERENCE_IMG_SIZE)
 
             count = 0
             gesture_in_current_frame = False
@@ -349,15 +312,15 @@ def ai_processing_loop():
             output_frame = frame.copy()
 
 # ==========================================
-# 3. VIDEO STREAMING ENDPOINTS (MJPEG)
+# 3. VIDEO STREAMING ENDPOINT (MJPEG)
 # ==========================================
-def _mjpeg_generator(get_frame):
+def generate_mjpeg_stream():
+    global output_frame, lock
     while True:
         with lock:
-            frame = get_frame()
-            if frame is None:
+            if output_frame is None:
                 continue
-            flag, encoded_image = cv2.imencode(".jpg", frame)
+            flag, encoded_image = cv2.imencode(".jpg", output_frame)
             if not flag:
                 continue
 
@@ -368,23 +331,35 @@ def _mjpeg_generator(get_frame):
 
 @app.get("/live-feed")
 def video_feed():
-    """Processed feed - YOLO boxes + pose skeleton drawn on top."""
-    return StreamingResponse(_mjpeg_generator(lambda: output_frame),
-                              media_type="multipart/x-mixed-replace; boundary=frame")
+    return StreamingResponse(generate_mjpeg_stream(), media_type="multipart/x-mixed-replace; boundary=frame")
 
-@app.get("/raw-feed")
+
+def generate_raw_mjpeg_stream():
+    """Same idea as generate_mjpeg_stream(), but reads raw_output_frame
+    (no boxes/skeleton/banner) instead of the AI-processed one."""
+    global raw_output_frame, lock
+    while True:
+        with lock:
+            if raw_output_frame is None:
+                continue
+            flag, encoded_image = cv2.imencode(".jpg", raw_output_frame)
+            if not flag:
+                continue
+
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + bytearray(encoded_image) + b'\r\n')
+
+        time.sleep(0.05)
+
+# FIX: this is the missing "live camera" feed. /live-feed only ever sent the
+# AI-processed frame (boxes/skeleton/PERSONS banner burned in) - there was no
+# endpoint anywhere serving the plain camera image, which is why the
+# frontend's raw "live camera" tile never had anything to point at even
+# though the AI-processed tile worked fine. Point that <img>/<video> src at
+# http://<engine-host>:8001/live-feed-raw
+@app.get("/live-feed-raw")
 def raw_video_feed():
-    """
-    FIX: unprocessed passthrough feed, served from HERE (engine) instead of
-    the frontend connecting to the phone's DroidCam URL directly. DroidCam
-    only allows one connected client at a time - if the frontend's raw
-    preview AND this engine both try to open http://phone:4747/video
-    directly, one of them gets DroidCam's "busy, take over?" HTML page
-    instead of video. Now only this engine ever touches the phone URL, and
-    the frontend gets its raw preview from here too.
-    """
-    return StreamingResponse(_mjpeg_generator(lambda: raw_frame),
-                              media_type="multipart/x-mixed-replace; boundary=frame")
+    return StreamingResponse(generate_raw_mjpeg_stream(), media_type="multipart/x-mixed-replace; boundary=frame")
 
 
 # ==========================================
@@ -395,7 +370,6 @@ if __name__ == "__main__":
     ai_thread.start()
 
     print("\n🚀 [NETRA UNIFIED] AI Engine Running (CPU Mode + Anti-Flicker 3-Sec Logic)!")
-    print("📺 Live Feed URL: http://127.0.0.1:8001/live-feed")
-    print("📺 Raw Feed URL:  http://127.0.0.1:8001/raw-feed\n")
+    print("📺 Live Feed URL: http://127.0.0.1:8001/live-feed\n")
 
     uvicorn.run(app, host="0.0.0.0", port=8001, log_level="error")

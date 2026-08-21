@@ -25,7 +25,7 @@ function App() {
   // phone - DroidCam only allows ONE connected client at a time, so if the
   // browser and the engine both try to open the phone's URL directly, one of
   // them gets DroidCam's "busy" page instead of video.
-  const AI_RAW_FEED_URL = `${AI_ENGINE_BASE}/raw-feed`;
+  const AI_RAW_FEED_URL = `${AI_ENGINE_BASE}/live-feed-raw`;
 
   // =========================================================
   // GLOBAL STATE
@@ -72,16 +72,12 @@ function App() {
   const DROIDCAM_VIDEO_URL = "http://192.168.1.2:4747/video";
 
   const [camera1Url, setCamera1Url] = useState(DROIDCAM_VIDEO_URL);
-  const [camera2Url, setCamera2Url] = useState("");
 
   const [camera1Online, setCamera1Online] = useState(false);
-  const [camera2Online, setCamera2Online] = useState(false);
 
   const [camera1Connecting, setCamera1Connecting] = useState(false);
-  const [camera2Connecting, setCamera2Connecting] = useState(false);
 
   const [camera1Refresh, setCamera1Refresh] = useState(0);
-  const [camera2Refresh, setCamera2Refresh] = useState(0);
 
   const [cameraSyncStatus, setCameraSyncStatus] = useState({
     type: "INFO",
@@ -89,7 +85,17 @@ function App() {
   });
 
   const camera1TimeoutRef = useRef(null);
-  const camera2TimeoutRef = useRef(null);
+
+  // FIX: raw preview (/raw-feed) and the AI processed feed (/live-feed) are
+  // two independent streams from the engine. Previously camera1Online was
+  // driven ONLY by the raw <img>'s onLoad/onError - so if the raw-feed relay
+  // hiccuped for any reason, every status badge on the page said OFFLINE
+  // even while the AI Processed Feed below was clearly receiving and
+  // rendering live frames. This ref lets the AI feed's own onLoad count as
+  // "camera is online" too, and stops the raw feed's onError from wrongly
+  // flipping everything to offline when the AI feed is proving the camera
+  // is actually live.
+  const aiFeedOnlineRef = useRef(false);
 
   // =========================================================
   // CAMERA HELPERS
@@ -99,13 +105,6 @@ function App() {
     if (camera1TimeoutRef.current) {
       clearTimeout(camera1TimeoutRef.current);
       camera1TimeoutRef.current = null;
-    }
-  };
-
-  const clearCamera2Timeout = () => {
-    if (camera2TimeoutRef.current) {
-      clearTimeout(camera2TimeoutRef.current);
-      camera2TimeoutRef.current = null;
     }
   };
 
@@ -157,6 +156,7 @@ function App() {
     setCamera1Url(url);
     setCamera1Online(false);
     setCamera1Connecting(true);
+    aiFeedOnlineRef.current = false;
 
     setCameraSyncStatus({
       type: "INFO",
@@ -195,46 +195,6 @@ function App() {
   };
 
   // =========================================================
-  // CAMERA 2 CONNECT
-  // =========================================================
-
-  const connectCamera2 = () => {
-    const url = normalizeCameraUrl(camera2Url);
-
-    if (!url) {
-      setCameraSyncStatus({
-        type: "ERROR",
-        message: "Please enter Camera #2 URL.",
-      });
-
-      return;
-    }
-
-    clearCamera2Timeout();
-
-    setCamera2Url(url);
-    setCamera2Online(false);
-    setCamera2Connecting(true);
-
-    setCameraSyncStatus({
-      type: "INFO",
-      message: "Connecting Camera #2...",
-    });
-
-    setCamera2Refresh((prev) => prev + 1);
-
-    camera2TimeoutRef.current = setTimeout(() => {
-      setCamera2Connecting(false);
-      setCamera2Online(false);
-
-      setCameraSyncStatus({
-        type: "ERROR",
-        message: "Camera #2 connection failed. Check URL and Wi-Fi.",
-      });
-    }, 15000);
-  };
-
-  // =========================================================
   // CAMERA LOAD
   // =========================================================
 
@@ -250,16 +210,25 @@ function App() {
     });
   };
 
-  const handleCamera2Load = () => {
-    clearCamera2Timeout();
+  // FIX: the AI Processed Feed <img> had no onLoad/onError handlers at all
+  // before, so a successful processed stream never told the rest of the UI
+  // "the camera is online". Now it does - either the raw feed OR the AI
+  // feed loading successfully marks Camera #1 as online.
+  const handleAiFeedLoad = () => {
+    aiFeedOnlineRef.current = true;
 
-    setCamera2Online(true);
-    setCamera2Connecting(false);
+    clearCamera1Timeout();
+    setCamera1Online(true);
+    setCamera1Connecting(false);
 
     setCameraSyncStatus({
       type: "SUCCESS",
-      message: "Camera #2 is LIVE.",
+      message: "AI engine is processing Camera #1 feed.",
     });
+  };
+
+  const handleAiFeedError = () => {
+    aiFeedOnlineRef.current = false;
   };
 
   // =========================================================
@@ -267,6 +236,18 @@ function App() {
   // =========================================================
 
   const handleCamera1Error = () => {
+    // FIX: this used to unconditionally flip camera1Online back to false
+    // whenever the raw /raw-feed <img> failed - even if the AI Processed
+    // Feed (/live-feed) was actively streaming real frames. That's exactly
+    // why the whole dashboard showed OFFLINE everywhere while the AI feed
+    // was visibly working: the raw feed relay was the only thing broken,
+    // but its failure was overriding a genuinely-online camera. Now we only
+    // mark the camera offline if the AI feed hasn't confirmed a connection
+    // either.
+    if (aiFeedOnlineRef.current) {
+      return;
+    }
+
     clearCamera1Timeout();
 
     setCamera1Online(false);
@@ -276,18 +257,6 @@ function App() {
       type: "ERROR",
       message:
         "DroidCam stream failed. Make sure http://192.168.1.2:4747 is reachable.",
-    });
-  };
-
-  const handleCamera2Error = () => {
-    clearCamera2Timeout();
-
-    setCamera2Online(false);
-    setCamera2Connecting(false);
-
-    setCameraSyncStatus({
-      type: "ERROR",
-      message: "Camera #2 stream failed.",
     });
   };
 
@@ -302,15 +271,7 @@ function App() {
     setCamera1Online(false);
     setCamera1Connecting(false);
     setCamera1Refresh(0);
-  };
-
-  const handleCamera2UrlChange = (value) => {
-    clearCamera2Timeout();
-
-    setCamera2Url(value);
-    setCamera2Online(false);
-    setCamera2Connecting(false);
-    setCamera2Refresh(0);
+    aiFeedOnlineRef.current = false;
   };
 
   // =========================================================
@@ -320,7 +281,6 @@ function App() {
   useEffect(() => {
     return () => {
       clearCamera1Timeout();
-      clearCamera2Timeout();
     };
   }, []);
 
@@ -2080,7 +2040,7 @@ function App() {
 
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 netra-panel">
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 max-w-md mx-auto gap-5">
 
                 {/* CAMERA 1 */}
 
@@ -2114,41 +2074,6 @@ function App() {
 
                 </div>
 
-                {/* CAMERA 2 */}
-
-                <div>
-
-                  <label className="block text-slate-400 mb-1.5 text-[11px] font-mono">
-                    Optional Camera #2
-                  </label>
-
-                  <input
-                    type="text"
-                    value={camera2Url}
-                    onChange={(e) =>
-                      handleCamera2UrlChange(e.target.value)
-                    }
-                    placeholder="http://192.168.1.X:8080/video"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 netra-input text-indigo-300 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 font-mono text-xs"
-                  />
-
-                  <button
-                    onClick={connectCamera2}
-                    disabled={
-                      camera2Connecting ||
-                      !camera2Url.trim()
-                    }
-                    className="w-full mt-3 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-400 disabled:bg-slate-700 disabled:text-slate-500 text-white font-bold rounded-xl text-xs"
-                  >
-                    {camera2Connecting
-                      ? "Connecting..."
-                      : camera2Online
-                        ? "Reconnect Camera #2"
-                        : "Connect Camera #2"}
-                  </button>
-
-                </div>
-
               </div>
 
               {/* STATUS */}
@@ -2175,7 +2100,7 @@ function App() {
 
             {/* CAMERA GRID */}
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6">
 
               {/* CAMERA 1 */}
 
@@ -2392,171 +2317,6 @@ function App() {
 
               </div>
 
-              {/* CAMERA 2 */}
-
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 netra-panel">
-
-                <div className="flex items-center justify-between mb-4">
-
-                  <div>
-
-                    <h3 className="text-white font-bold text-sm">
-                      Camera #2
-                    </h3>
-
-                    <p className="text-slate-500 text-[11px] font-mono break-all">
-                      {camera2Url || "Not configured"}
-                    </p>
-
-                  </div>
-
-                  <div
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${
-                      camera2Online
-                        ? "bg-emerald-950/50 border border-emerald-700/40"
-                        : "bg-red-950/50 border border-red-700/40"
-                    }`}
-                  >
-
-                    <span
-                      className={`w-2.5 h-2.5 rounded-full ${
-                        camera2Online
-                          ? "bg-emerald-500 animate-pulse"
-                          : "bg-red-500"
-                      }`}
-                    />
-
-                    <span
-                      className={`text-[11px] font-mono ${
-                        camera2Online
-                          ? "text-emerald-400"
-                          : "text-red-400"
-                      }`}
-                    >
-                      {camera2Online
-                        ? "LIVE"
-                        : camera2Connecting
-                          ? "CONNECTING"
-                          : "OFFLINE"}
-                    </span>
-
-                  </div>
-
-                </div>
-
-                <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-slate-800 netra-camera-frame">
-
-                  {camera2Url && camera2Refresh > 0 ? (
-
-                    <img
-                      key={`camera2-${camera2Refresh}`}
-                      src={camera2Url}
-                      alt="Camera 2 Live Feed"
-                      className="w-full h-full object-contain"
-                      onLoad={handleCamera2Load}
-                      onError={handleCamera2Error}
-                    />
-
-                  ) : (
-
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-
-                      <div className="w-16 h-16 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center mb-4">
-
-                        <span className="text-slate-500 text-2xl">
-                          📷
-                        </span>
-
-                      </div>
-
-                      <div className="text-slate-400 font-mono text-sm">
-                        CAMERA #2
-                      </div>
-
-                      <div className="text-slate-600 text-[11px] mt-1">
-                        Optional camera
-                      </div>
-
-                    </div>
-
-                  )}
-
-                  {camera2Connecting && (
-
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/75">
-
-                      <div className="w-10 h-10 rounded-full border-4 border-indigo-500/30 border-t-indigo-400 animate-spin mb-4" />
-
-                      <div className="text-indigo-400 font-mono text-xs">
-                        CONNECTING...
-                      </div>
-
-                    </div>
-
-                  )}
-
-                </div>
-
-                {/* CAMERA 2 DEVICE / PORT / STATUS */}
-
-                <div className="grid grid-cols-3 gap-3 mt-4">
-
-                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-center">
-
-                    <div className="text-slate-500 text-[10px] font-mono">
-                      DEVICE
-                    </div>
-
-                    <div className="text-indigo-400 text-xs font-mono mt-1">
-                      Camera #2
-                    </div>
-
-                  </div>
-
-                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-center">
-
-                    <div className="text-slate-500 text-[10px] font-mono">
-                      PORT
-                    </div>
-
-                    <div className="text-indigo-400 text-xs font-mono mt-1">
-                      {camera2Url
-                        ? (() => {
-                            try {
-                              return new URL(camera2Url).port || "N/A";
-                            } catch {
-                              return "N/A";
-                            }
-                          })()
-                        : "N/A"}
-                    </div>
-
-                  </div>
-
-                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-center">
-
-                    <div className="text-slate-500 text-[10px] font-mono">
-                      STATUS
-                    </div>
-
-                    <div
-                      className={`text-xs font-mono mt-1 ${
-                        camera2Online
-                          ? "text-emerald-400"
-                          : "text-red-400"
-                      }`}
-                    >
-                      {camera2Online
-                        ? "Connected"
-                        : "Offline"}
-                    </div>
-
-                  </div>
-
-                </div>
-
-              </div>
-
             </div>
 
             {/* AI PROCESSED FEED - FIX: this whole panel was missing in this
@@ -2622,6 +2382,8 @@ function App() {
                     src={AI_LIVE_FEED_URL}
                     alt="AI Processed Feed"
                     className="w-full h-full object-contain"
+                    onLoad={handleAiFeedLoad}
+                    onError={handleAiFeedError}
                   />
 
                 ) : (
