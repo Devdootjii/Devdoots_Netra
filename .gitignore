@@ -1,2 +1,9 @@
 .venv
 start_netra.bat
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+alert_latency_log.txt
+.env
+credentials.json
