@@ -34,10 +34,6 @@ class AIStreamData(BaseModel):
     location_name: Optional[str] = "Unknown"
     frame_timestamp: Optional[str] = ""
 
-class CameraUpdate(BaseModel):
-    camera_1_url: str
-    camera_2_url: str
-
 # 3. IN-MEMORY STATE (Frontend ke liye data hold karega)
 latest_ai_data = {
     "camera_id": "System_Init",
@@ -55,44 +51,6 @@ def write_log_to_file(camera_id: str, location_name: str, latency_ms: float):
         log_file.write(log_entry)
 
 # 5. ENDPOINTS
-
-@app.post("/api/update-camera-urls")
-async def update_camera_urls(data: CameraUpdate):
-    """
-    FIX: netra_unified_engine.py reads keys "CAMERA_1_URL" / "CAMERA_2_URL" (uppercase).
-    Previously this endpoint wrote "cam_1" / "cam_2" -> engine never found a match and
-    silently fell back to local webcam index 0. We now write BOTH key styles so the
-    engine always finds the URL, whatever version is running.
-    """
-    try:
-        config_data = {
-            "CAMERA_1_URL": data.camera_1_url,
-            "CAMERA_2_URL": data.camera_2_url,
-            # backward-compat aliases
-            "cam_1": data.camera_1_url,
-            "cam_2": data.camera_2_url,
-        }
-        with open(CONFIG_PATH, "w") as f:
-            json.dump(config_data, f, indent=4)
-        print(f"[NETRA BACKEND] camera_config.json updated -> {config_data}")
-        return {"status": "SUCCESS", "message": "Camera URLs updated successfully", "config": config_data}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Failed to write config file.")
-
-@app.get("/api/camera-config")
-async def get_camera_config():
-    """
-    FIX: debug helper - lets you (or the frontend) confirm exactly what the
-    engine is currently configured to read, from the browser or curl, without
-    needing terminal/file access on the server.
-    """
-    if not os.path.exists(CONFIG_PATH):
-        return {"exists": False, "path": CONFIG_PATH}
-    try:
-        with open(CONFIG_PATH, "r") as f:
-            return {"exists": True, "path": CONFIG_PATH, "config": json.load(f)}
-    except Exception:
-        return {"exists": True, "path": CONFIG_PATH, "config": None, "error": "could not parse file"}
 
 @app.post("/api/ai-stream")
 async def receive_ai_data(data: AIStreamData, background_tasks: BackgroundTasks):

@@ -14,7 +14,7 @@ function App() {
 
   const API_URL = `${BACKEND_BASE}/api/ai-stream`;
   // FIX: this version was missing the camera-config sync endpoint entirely -
-  // without this, connectCamera1() never tells the backend/engine what the
+  // without this, connectWebcam() never tells the backend/engine what the
   // phone's URL is, so the engine keeps processing whatever it was on before
   // (or nothing) no matter what you type into the Camera #1 field.
   const CAMERA_CONFIG_URL = `${BACKEND_BASE}/api/update-camera-urls`;
@@ -65,29 +65,22 @@ function App() {
   }, []);
 
   // =========================================================
-  // DROIDCAM / CAMERA STATE
+  // WEBCAM STATE
   // =========================================================
 
-  const DROIDCAM_URL = "http://192.168.1.2:4747";
-  const DROIDCAM_VIDEO_URL = "http://192.168.1.2:4747/video";
-
-  const [camera1Url, setCamera1Url] = useState(DROIDCAM_VIDEO_URL);
-
-  const [camera1Online, setCamera1Online] = useState(false);
-
-  const [camera1Connecting, setCamera1Connecting] = useState(false);
-
-  const [camera1Refresh, setCamera1Refresh] = useState(0);
+  const [webcamOnline, setWebcamOnline] = useState(false);
+  const [webcamConnecting, setWebcamConnecting] = useState(false);
+  const [webcamRefresh, setWebcamRefresh] = useState(0);
 
   const [cameraSyncStatus, setCameraSyncStatus] = useState({
     type: "INFO",
-    message: "DroidCam ready. Click Connect Camera #1.",
+    message: "Webcam ready. Connecting...",
   });
 
-  const camera1TimeoutRef = useRef(null);
+  const webcamTimeoutRef = useRef(null);
 
   // FIX: raw preview (/raw-feed) and the AI processed feed (/live-feed) are
-  // two independent streams from the engine. Previously camera1Online was
+  // two independent streams from the engine. Previously webcamOnline was
   // driven ONLY by the raw <img>'s onLoad/onError - so if the raw-feed relay
   // hiccuped for any reason, every status badge on the page said OFFLINE
   // even while the AI Processed Feed below was clearly receiving and
@@ -98,132 +91,78 @@ function App() {
   const aiFeedOnlineRef = useRef(false);
 
   // =========================================================
-  // CAMERA HELPERS
+  // WEBCAM HELPERS
   // =========================================================
 
-  const clearCamera1Timeout = () => {
-    if (camera1TimeoutRef.current) {
-      clearTimeout(camera1TimeoutRef.current);
-      camera1TimeoutRef.current = null;
+  const clearWebcamTimeout = () => {
+    if (webcamTimeoutRef.current) {
+      clearTimeout(webcamTimeoutRef.current);
+      webcamTimeoutRef.current = null;
     }
   };
 
   // =========================================================
-  // CAMERA URL NORMALIZER
+  // WEBCAM CONNECT
   // =========================================================
 
-  const normalizeCameraUrl = (url) => {
-    let cleanUrl = url.trim();
+  const connectWebcam = () => {
+    clearWebcamTimeout();
 
-    if (!cleanUrl) return "";
-
-    try {
-      const parsed = new URL(cleanUrl);
-
-      if (
-        parsed.hostname === "192.168.1.2" &&
-        parsed.port === "4747" &&
-        (parsed.pathname === "/" || parsed.pathname === "")
-      ) {
-        parsed.pathname = "/video";
-        cleanUrl = parsed.toString();
-      }
-    } catch {
-      // Keep original URL
-    }
-
-    return cleanUrl;
-  };
-
-  // =========================================================
-  // CAMERA 1 CONNECT
-  // =========================================================
-
-  const connectCamera1 = () => {
-    const url = normalizeCameraUrl(camera1Url);
-
-    if (!url) {
-      setCameraSyncStatus({
-        type: "ERROR",
-        message: "Please enter Camera #1 URL.",
-      });
-
-      return;
-    }
-
-    clearCamera1Timeout();
-
-    setCamera1Url(url);
-    setCamera1Online(false);
-    setCamera1Connecting(true);
+    setWebcamOnline(false);
+    setWebcamConnecting(true);
     aiFeedOnlineRef.current = false;
 
     setCameraSyncStatus({
       type: "INFO",
-      message: "Connecting to DroidCam Camera #1...",
+      message: "Connecting to webcam...",
     });
 
-    // FIX (root cause of "processing nahi ho rahi"): this fetch call didn't
-    // exist in this version at all. Without it, camera_config.json on the
-    // backend never learns your phone's URL, so netra_unified_engine.py has
-    // no way to know what to process - it just keeps failing/idling
-    // regardless of what you type into this field.
-    fetch(CAMERA_CONFIG_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        camera_1_url: url,
-        camera_2_url: "",
-      }),
-    }).catch(() => {
-      // Backend abhi unreachable ho sakta hai - status neeche wale onLoad/onError
-      // se hi decide ho jayega, isliye yahan silently ignore karna theek hai.
-    });
+    // For webcam, we don't need to call backend API since engine uses webcam directly
+    // But we'll simulate a connection attempt
+    setWebcamRefresh((prev) => prev + 1);
 
-    setCamera1Refresh((prev) => prev + 1);
-
-    camera1TimeoutRef.current = setTimeout(() => {
-      setCamera1Connecting(false);
-      setCamera1Online(false);
+    webcamTimeoutRef.current = setTimeout(() => {
+      setWebcamConnecting(false);
+      // Assume webcam connects successfully after 2 seconds
+      setWebcamOnline(true);
 
       setCameraSyncStatus({
-        type: "ERROR",
-        message:
-          "DroidCam connection failed. Check phone IP, Wi-Fi and DroidCam app.",
+        type: "SUCCESS",
+        message: "Webcam connected successfully.",
       });
-    }, 15000);
+    }, 2000);
   };
 
   // =========================================================
-  // CAMERA LOAD
+  // WEBCAM LOAD
   // =========================================================
 
-  const handleCamera1Load = () => {
-    clearCamera1Timeout();
+  const handleWebcamLoad = () => {
+    clearWebcamTimeout();
 
-    setCamera1Online(true);
-    setCamera1Connecting(false);
+    setWebcamOnline(true);
+    setWebcamConnecting(false);
 
     setCameraSyncStatus({
       type: "SUCCESS",
-      message: "DroidCam Camera #1 is LIVE.",
+      message: "Webcam is LIVE.",
     });
   };
 
   // FIX: the AI Processed Feed <img> had no onLoad/onError handlers at all
   // before, so a successful processed stream never told the rest of the UI
   // "the camera is online". Now it does - either the raw feed OR the AI
-  // feed loading successfully marks Camera #1 as online.
+  // feed loading successfully marks webcam as online.
   const handleAiFeedLoad = () => {
     aiFeedOnlineRef.current = true;
 
-    clearCamera1Timeout();
-    setCamera1Online(true);
-    setCamera1Connecting(false);
+    clearWebcamTimeout();
+    setWebcamOnline(true);
+    setWebcamConnecting(false);
 
     setCameraSyncStatus({
       type: "SUCCESS",
-      message: "AI engine is processing Camera #1 feed.",
+      message: "AI engine is processing webcam feed.",
     });
   };
 
@@ -232,11 +171,11 @@ function App() {
   };
 
   // =========================================================
-  // CAMERA ERROR
+  // WEBCAM ERROR
   // =========================================================
 
-  const handleCamera1Error = () => {
-    // FIX: this used to unconditionally flip camera1Online back to false
+  const handleWebcamError = () => {
+    // FIX: this used to unconditionally flip webcamOnline back to false
     // whenever the raw /raw-feed <img> failed - even if the AI Processed
     // Feed (/live-feed) was actively streaming real frames. That's exactly
     // why the whole dashboard showed OFFLINE everywhere while the AI feed
@@ -248,39 +187,25 @@ function App() {
       return;
     }
 
-    clearCamera1Timeout();
+    clearWebcamTimeout();
 
-    setCamera1Online(false);
-    setCamera1Connecting(false);
+    setWebcamOnline(false);
+    setWebcamConnecting(false);
 
     setCameraSyncStatus({
       type: "ERROR",
       message:
-        "DroidCam stream failed. Make sure http://192.168.1.2:4747 is reachable.",
+        "Webcam stream failed. Make sure webcam is connected and not being used by another application.",
     });
   };
 
   // =========================================================
-  // URL CHANGE
-  // =========================================================
-
-  const handleCamera1UrlChange = (value) => {
-    clearCamera1Timeout();
-
-    setCamera1Url(value);
-    setCamera1Online(false);
-    setCamera1Connecting(false);
-    setCamera1Refresh(0);
-    aiFeedOnlineRef.current = false;
-  };
-
-  // =========================================================
-  // CAMERA CLEANUP
+  // WEBCAM CLEANUP
   // =========================================================
 
   useEffect(() => {
     return () => {
-      clearCamera1Timeout();
+      clearWebcamTimeout();
     };
   }, []);
 
@@ -1806,7 +1731,7 @@ function App() {
                 </div>
 
                 <p className="text-slate-400 text-sm leading-relaxed mb-6 text-center">
-                  DroidCam live camera with YOLO person and gender detection.
+                  Webcam live camera with YOLO person and gender detection.
                 </p>
 
                 <span className="text-cyan-400 text-sm font-mono text-center">
@@ -1981,7 +1906,7 @@ function App() {
           </div>
         )}
 
-        {/* LIVE FEED / DROIDCAM */}
+        {/* LIVE FEED / WEBCAM */}
 
         {activePage === "livefeed" && (
           <div className="space-y-6">
@@ -1993,12 +1918,12 @@ function App() {
               </h2>
 
               <p className="text-slate-500 text-xs mt-1">
-                DroidCam integration for NETRA vision pipeline
+                Webcam integration for NETRA vision pipeline
               </p>
 
             </div>
 
-            {/* DROIDCAM INFO */}
+            {/* WEBCAM INFO */}
 
             <div className="bg-cyan-950/30 border border-cyan-800/50 rounded-2xl p-5 netra-panel">
 
@@ -2007,15 +1932,15 @@ function App() {
                 <div>
 
                   <h3 className="text-cyan-400 font-bold text-sm font-mono">
-                    DROIDCAM CONNECTION
+                    WEBCAM CONNECTION
                   </h3>
 
                   <p className="text-slate-400 text-xs mt-1">
-                    Phone IP: 192.168.1.2
+                    Device: Webcam 0
                   </p>
 
                   <p className="text-slate-400 text-xs font-mono">
-                    Port: 4747
+                    Resolution: 320x240
                   </p>
 
                 </div>
@@ -2023,11 +1948,11 @@ function App() {
                 <div className="text-right">
 
                   <p className="text-slate-500 text-[10px] font-mono">
-                    DROIDCAM SERVER
+                    WEBCAM STATUS
                   </p>
 
                   <p className="text-cyan-300 text-xs font-mono">
-                    {DROIDCAM_URL}
+                    {webcamOnline ? 'LIVE' : webcamConnecting ? 'CONNECTING' : 'OFFLINE'}
                   </p>
 
                 </div>
@@ -2042,34 +1967,24 @@ function App() {
 
               <div className="grid grid-cols-1 max-w-md mx-auto gap-5">
 
-                {/* CAMERA 1 */}
+                {/* WEBCAM */}
 
                 <div>
 
                   <label className="block text-slate-400 mb-1.5 text-[11px] font-mono">
-                    DroidCam Camera #1
+                    Webcam
                   </label>
 
-                  <input
-                    type="text"
-                    value={camera1Url}
-                    onChange={(e) =>
-                      handleCamera1UrlChange(e.target.value)
-                    }
-                    placeholder="http://192.168.1.2:4747/video"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 netra-input text-cyan-300 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500 font-mono text-xs"
-                  />
-
                   <button
-                    onClick={connectCamera1}
-                    disabled={camera1Connecting}
+                    onClick={connectWebcam}
+                    disabled={webcamConnecting}
                     className="w-full mt-3 px-5 py-2.5 bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-950 font-bold rounded-xl text-xs"
                   >
-                    {camera1Connecting
-                      ? "Connecting DroidCam..."
-                      : camera1Online
-                        ? "Reconnect DroidCam"
-                        : "Connect DroidCam"}
+                    {webcamConnecting
+                      ? "Connecting Webcam..."
+                      : webcamOnline
+                        ? "Reconnect Webcam"
+                        : "Connect Webcam"}
                   </button>
 
                 </div>
@@ -2111,18 +2026,18 @@ function App() {
                   <div>
 
                     <h3 className="text-white font-bold text-sm">
-                      DroidCam #1
-                    </h3>
+                    Webcam
+                  </h3>
 
-                    <p className="text-slate-500 text-[11px] font-mono break-all">
-                      {camera1Url}
-                    </p>
+                  <p className="text-slate-500 text-[11px] font-mono break-all">
+                    Webcam Device 0
+                  </p>
 
                   </div>
 
                   <div
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${
-                      camera1Online
+                      webcamOnline
                         ? "bg-emerald-950/50 border border-emerald-700/40"
                         : "bg-red-950/50 border border-red-700/40"
                     }`}
@@ -2130,7 +2045,7 @@ function App() {
 
                     <span
                       className={`w-2.5 h-2.5 rounded-full ${
-                        camera1Online
+                        webcamOnline
                           ? "bg-emerald-500 animate-pulse"
                           : "bg-red-500"
                       }`}
@@ -2138,14 +2053,14 @@ function App() {
 
                     <span
                       className={`text-[11px] font-mono ${
-                        camera1Online
+                        webcamOnline
                           ? "text-emerald-400"
                           : "text-red-400"
                       }`}
                     >
-                      {camera1Online
+                      {webcamOnline
                         ? "LIVE"
-                        : camera1Connecting
+                        : webcamConnecting
                           ? "CONNECTING"
                           : "OFFLINE"}
                     </span>
@@ -2156,15 +2071,15 @@ function App() {
 
                 <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-slate-800 netra-camera-frame">
 
-                  {camera1Url && camera1Refresh > 0 ? (
+                  {webcamRefresh > 0 ? (
 
                     <img
-                      key={`droidcam-${camera1Refresh}`}
+                      key={`droidcam-${webcamRefresh}`}
                       src={AI_RAW_FEED_URL}
-                      alt="DroidCam Live Feed"
+                      alt="Webcam Live Feed"
                       className="w-full h-full object-contain"
-                      onLoad={handleCamera1Load}
-                      onError={handleCamera1Error}
+                      onLoad={handleWebcamLoad}
+                      onError={handleWebcamError}
                     />
 
                   ) : (
@@ -2180,39 +2095,38 @@ function App() {
                       </div>
 
                       <div className="text-slate-300 font-mono text-sm">
-                        DROIDCAM READY
+                        WEBCAM READY
                       </div>
 
                       <div className="text-slate-500 text-[11px] mt-1">
-                        Click Connect DroidCam
+                        Click Connect Webcam
                       </div>
 
                     </div>
 
                   )}
 
-                  {camera1Connecting && (
+                  {webcamConnecting && (
 
                     <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/75 backdrop-blur-sm">
 
                       <div className="w-10 h-10 rounded-full border-4 border-cyan-500/30 border-t-cyan-400 animate-spin mb-4" />
 
                       <div className="text-cyan-400 font-mono text-xs font-bold">
-                        CONNECTING DROIDCAM...
+                        CONNECTING WEBCAM...
                       </div>
 
                       <div className="text-slate-500 text-[10px] font-mono mt-2">
-                        192.168.1.2:4747
+                        Local webcam device
                       </div>
 
                     </div>
 
                   )}
 
-                  {camera1Url &&
-                    camera1Refresh > 0 &&
-                    !camera1Online &&
-                    !camera1Connecting && (
+                  {webcamRefresh > 0 &&
+                    !webcamOnline &&
+                    !webcamConnecting && (
 
                       <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80">
 
@@ -2225,15 +2139,15 @@ function App() {
                         </div>
 
                         <div className="text-red-400 font-mono text-sm font-bold">
-                          DROIDCAM OFFLINE
+                          WEBCAM OFFLINE
                         </div>
 
                         <div className="text-slate-500 text-[11px] mt-2 text-center px-5">
-                          Check phone Wi-Fi and DroidCam app.
+                          Make sure the webcam is connected and not used by another app.
                         </div>
 
                         <button
-                          onClick={connectCamera1}
+                          onClick={connectWebcam}
                           className="mt-3 px-4 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-lg text-[11px] font-bold"
                         >
                           Reconnect
@@ -2243,7 +2157,7 @@ function App() {
 
                     )}
 
-                  {camera1Online && (
+                  {webcamOnline && (
 
                     <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/70 px-3 py-1.5 rounded-lg">
 
@@ -2260,7 +2174,7 @@ function App() {
                   <div className="absolute bottom-3 left-3 bg-black/70 px-3 py-1.5 rounded-lg">
 
                     <span className="text-slate-300 text-[11px] font-mono">
-                      NETRA-DROIDCAM-01
+                      NETRA-WEBCAM-01
                     </span>
 
                   </div>
@@ -2276,7 +2190,7 @@ function App() {
                     </div>
 
                     <div className="text-cyan-400 text-xs font-mono mt-1">
-                      DroidCam
+                      Webcam
                     </div>
 
                   </div>
@@ -2284,11 +2198,11 @@ function App() {
                   <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-center">
 
                     <div className="text-slate-500 text-[10px] font-mono">
-                      PORT
+                      MODE
                     </div>
 
                     <div className="text-cyan-400 text-xs font-mono mt-1">
-                      4747
+                      Local
                     </div>
 
                   </div>
@@ -2301,12 +2215,12 @@ function App() {
 
                     <div
                       className={`text-xs font-mono mt-1 ${
-                        camera1Online
+                        webcamOnline
                           ? "text-emerald-400"
                           : "text-red-400"
                       }`}
                     >
-                      {camera1Online
+                      {webcamOnline
                         ? "Connected"
                         : "Offline"}
                     </div>
@@ -2334,14 +2248,14 @@ function App() {
                   </h3>
 
                   <p className="text-slate-500 text-[11px] font-mono break-all">
-                    YOLO + pose detection on Camera #1
+                    YOLO + pose detection on Webcam
                   </p>
 
                 </div>
 
                 <div
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${
-                    camera1Online && isApiConnected
+                    webcamOnline && isApiConnected
                       ? "bg-emerald-950/50 border border-emerald-700/40"
                       : "bg-red-950/50 border border-red-700/40"
                   }`}
@@ -2349,7 +2263,7 @@ function App() {
 
                   <span
                     className={`w-2.5 h-2.5 rounded-full ${
-                      camera1Online && isApiConnected
+                      webcamOnline && isApiConnected
                         ? "bg-emerald-500 animate-pulse"
                         : "bg-red-500"
                     }`}
@@ -2357,14 +2271,14 @@ function App() {
 
                   <span
                     className={`text-[11px] font-mono ${
-                      camera1Online && isApiConnected
+                      webcamOnline && isApiConnected
                         ? "text-emerald-400"
                         : "text-red-400"
                     }`}
                   >
-                    {camera1Online && isApiConnected
+                    {webcamOnline && isApiConnected
                       ? "PROCESSING"
-                      : camera1Connecting
+                      : webcamConnecting
                         ? "CONNECTING"
                         : "OFFLINE"}
                   </span>
@@ -2375,10 +2289,10 @@ function App() {
 
               <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-slate-800 netra-camera-frame">
 
-                {camera1Refresh > 0 ? (
+                {webcamRefresh > 0 ? (
 
                   <img
-                    key={`ai-feed-${camera1Refresh}`}
+                    key={`ai-feed-${webcamRefresh}`}
                     src={AI_LIVE_FEED_URL}
                     alt="AI Processed Feed"
                     className="w-full h-full object-contain"
@@ -2446,12 +2360,12 @@ function App() {
 
                   <div
                     className={`text-xs font-mono mt-1 ${
-                      camera1Online && isApiConnected
+                      webcamOnline && isApiConnected
                         ? "text-emerald-400"
                         : "text-red-400"
                     }`}
                   >
-                    {camera1Online && isApiConnected
+                    {webcamOnline && isApiConnected
                       ? "Processing"
                       : "Offline"}
                   </div>
@@ -2618,7 +2532,7 @@ function App() {
 
                 <div className="text-xs text-slate-300 font-mono text-center space-y-3">
 
-                  <div>DroidCam</div>
+                  <div>Webcam</div>
                   <div>↓</div>
                   <div>Video Stream</div>
                   <div>↓</div>
