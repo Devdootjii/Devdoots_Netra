@@ -100,13 +100,11 @@ Helps improve response time by providing intelligent detection and timely alerts
 
 </p>
 
-### 🎬 Demo Video
+## 🎬 NETRA Demo
 
-<!-- DEMO VIDEO WILL BE ADDED HERE -->
-
-A complete demonstration video showcasing NETRA's real-time surveillance, person detection, SOS gesture recognition, and emergency alert system will be added soon.
-
----
+<p align="center">
+  <img src="videos/demo-1.gif" alt="NETRA Demo" width="900">
+</p>
 
 ## 🛠️ Tech Stack
 
