@@ -102,8 +102,34 @@ Helps improve response time by providing intelligent detection and timely alerts
 
 ## 🎬 NETRA Demo
 
+### 🎥 Demo 1
+
 <p align="center">
-  <img src="videos/demo-1.gif" alt="NETRA Demo" width="900">
+  <img src="videos/demo-1.gif" alt="NETRA Demo 1" width="900">
+</p>
+
+### 🎥 Demo 2
+
+<p align="center">
+  <img src="videos/demo-2.gif" alt="NETRA Demo 2" width="900">
+</p>
+
+### 🎥 Demo 3
+
+<p align="center">
+  <img src="videos/demo-3.gif" alt="NETRA Demo 3" width="900">
+</p>
+
+### 🎥 Demo 4
+
+<p align="center">
+  <img src="videos/demo-4.gif" alt="NETRA Demo 4" width="900">
+</p>
+
+### 🎥 Demo 5
+
+<p align="center">
+  <img src="videos/demo-5.gif" alt="NETRA Demo 5" width="900">
 </p>
 
 ## 🛠️ Tech Stack
