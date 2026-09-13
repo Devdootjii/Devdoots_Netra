@@ -62,7 +62,7 @@ async def receive_ai_data(data: AIStreamData, background_tasks: BackgroundTasks)
 
     # Alert Logic & Background Logging
     if data.sos_active or data.threat_level == "CRITICAL":
-        print(f"[CRITICAL ALERT] Camera: {data.camera_id} | SOS Active. Triggering Telegram Alert...")
+        print(f"[CRITICAL ALERT] Camera: {data.camera_id} | SOS Active. (Telegram alerts removed, using internal processing)")
         latency_ms = (time.time() - start_time) * 1000
         background_tasks.add_task(write_log_to_file, data.camera_id, data.location_name, latency_ms)
 

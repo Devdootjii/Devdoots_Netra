@@ -10,6 +10,13 @@ from ultralytics import YOLO
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 import uvicorn
+import base64
+import tempfile
+from google import genai
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY")) if os.environ.get("GEMINI_API_KEY") else None
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 
 # ==========================================
 # 0. SERVER & CONFIGURATION
@@ -48,6 +55,35 @@ except Exception as e:
     print(f"❌ Error loading model: {e}")
     exit()
 
+# ==========================================
+# 1. GOOGLE VISION & DRIVE SETUP
+# ==========================================
+# Initialize Google Vision API (using google-genai) - client already created above
+if client:
+    print("[NETRA ENGINE] Google Vision API (Gemini) initialized.")
+else:
+    print("[NETRA ENGINE] WARNING: GEMINI_API_KEY not set. Vision API disabled.")
+
+# Google Drive setup
+DRIVE_CREDS_FILE = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "credentials.json")
+DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"]
+DRIVE_AVAILABLE = False
+drive_service = None
+try:
+    if os.path.exists(DRIVE_CREDS_FILE):
+        credentials = service_account.Credentials.from_service_account_file(
+            DRIVE_CREDS_FILE, scopes=DRIVE_SCOPES)
+        drive_service = build("drive", "v3", credentials=credentials)
+        DRIVE_AVAILABLE = True
+        print("[NETRA ENGINE] Google Drive API initialized.")
+    else:
+        print(f"[NETRA ENGINE] WARNING: Google Drive credentials not found at {DRIVE_CREDS_FILE}. Drive upload disabled.")
+except Exception as e:
+    print(f"[NETRA ENGINE] WARNING: Failed to initialize Google Drive: {e}. Drive upload disabled.")
+
+# ==========================================
+# 2. FRAME BUFFERS & LOCKS
+# ==========================================
 output_frame = None       # AI-processed frame (boxes/skeleton/banner) -> served at /live-feed
 raw_output_frame = None   # untouched camera frame, no overlay          -> served at /live-feed-raw
 
@@ -61,7 +97,11 @@ raw_output_frame = None   # untouched camera frame, no overlay          -> serve
 output_lock = threading.Lock()
 raw_lock = threading.Lock()
 
+latest_forensic_report = None
 
+# ==========================================
+# 3. WEBCAM FRAME READER
+# ==========================================
 class WebcamFrameReader:
     """
     Reads the local webcam continuously in a background thread and always
@@ -107,18 +147,8 @@ class WebcamFrameReader:
         self.thread.join(timeout=1.0)
         self.cap.release()
 
-
-# COCO-17 keypoint skeleton connections (for drawing dots + bones)
-SKELETON = [
-    (5, 6), (5, 7), (7, 9), (6, 8), (8, 10),          # shoulders/arms
-    (5, 11), (6, 12), (11, 12),                        # torso
-    (11, 13), (13, 15), (12, 14), (14, 16),            # legs
-    (0, 5), (0, 6),                                     # neck-ish
-    (0, 1), (0, 2), (1, 3), (2, 4),                     # face
-]
-
 # ==========================================
-# 1. HELPER FUNCTIONS
+# 4. HELPER FUNCTIONS
 # ==========================================
 def send_status_to_backend(persons, sos_active, camera_online=True):
     payload = {
@@ -147,7 +177,181 @@ def draw_skeleton(frame, kpts):
             cv2.line(frame, pts[a], pts[b], (0, 220, 255), 2)
 
 # ==========================================
-# 2. CORE AI PROCESSING THREAD
+# 5. GOOGLE VISION & DRIVE FUNCTIONS
+# ==========================================
+def capture_and_save_frame(frame, prefix="sos"):
+    """Capture a frame and save it to a temporary file, return the file path."""
+    try:
+        # Create a temporary file
+        temp_dir = tempfile.gettempdir()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{prefix}_{timestamp}.jpg"
+        filepath = os.path.join(temp_dir, filename)
+
+        # Save the frame as JPEG
+        cv2.imwrite(filepath, frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
+        return filepath
+    except Exception as e:
+        print(f"[NETRA ENGINE] Failed to capture frame: {e}")
+        return None
+
+def generate_forensic_report(image_path):
+    """Use Google Vision API (Gemini) to generate a forensic incident report from an image."""
+    if not client or not image_path or not os.path.exists(image_path):
+        return None
+
+    try:
+        # Upload the image to Gemini
+        uploaded_file = client.upload_file(path=image_path)
+
+        # Prompt for forensic report
+        prompt = "Analyze this surveillance emergency snapshot. Generate a structured forensic incident report including threat level, description of the situation, and timestamp."
+
+        # Generate content
+        response = client.generate_content(
+            model="gemini-1.5-flash",  # or another vision model
+            contents=[prompt, uploaded_file]
+        )
+
+        # Try to parse the response as JSON
+        report_text = response.text
+        # Clean the response to extract JSON
+        # Remove any markdown code block markers if present
+        if "```json" in report_text:
+            report_text = report_text.split("```json")[1].split("```")[0]
+        elif "```" in report_text:
+            report_text = report_text.split("```")[1].split("```")[0]
+
+        report = json.loads(report_text.strip())
+
+        # Ensure required fields exist
+        if "threat_level" not in report:
+            report["threat_level"] = "UNKNOWN"
+        if "description" not in report:
+            report["description"] = "No description provided."
+        if "timestamp" not in report:
+            report["timestamp"] = datetime.now().isoformat()
+
+        return report
+    except Exception as e:
+        print(f"[NETRA ENGINE] Failed to generate forensic report: {e}")
+        return None
+
+def upload_to_drive(image_path, report_dict):
+    """Upload the captured image and forensic report to Google Drive."""
+    if not DRIVE_AVAILABLE or not drive_service or not image_path or not os.path.exists(image_path):
+        return None, None
+
+    try:
+        # Upload the image
+        image_filename = os.path.basename(image_path)
+        image_file_metadata = {"name": f"Netra_SOS_{image_filename}"}
+        image_media = MediaFileUpload(image_path, mimetype="image/jpeg", resumable=True)
+        image_uploaded = drive_service.files().create(
+            body=image_file_metadata,
+            media_body=image_media,
+            fields="id, webViewLink"
+        ).execute()
+
+        # Make the image publicly readable
+        drive_service.permissions().create(
+            fileId=image_uploaded.get("id"),
+            body={"type": "anyone", "role": "reader"}
+        ).execute()
+        image_link = image_uploaded.get("webViewLink")
+
+        # Create a temporary file for the report
+        report_temp = None
+        report_link = None
+        try:
+            report_temp = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+            json.dump(report_dict, report_temp, indent=2)
+            report_temp.close()
+
+            # Upload the report
+            report_filename = f"report_{os.path.splitext(image_filename)[0]}.json"
+            report_file_metadata = {"name": f"Netra_SOS_Report_{report_filename}"}
+            report_media = MediaFileUpload(report_temp.name, mimetype="application/json", resumable=True)
+            report_uploaded = drive_service.files().create(
+                body=report_file_metadata,
+                media_body=report_media,
+                fields="id, webViewLink"
+            ).execute()
+
+            # Make the report publicly readable
+            drive_service.permissions().create(
+                fileId=report_uploaded.get("id"),
+                body={"type": "anyone", "role": "reader"}
+            ).execute()
+            report_link = report_uploaded.get("webViewLink")
+        finally:
+            # Clean up the temporary report file
+            if report_temp and os.path.exists(report_temp.name):
+                os.unlink(report_temp.name)
+
+        return image_link, report_link
+    except Exception as e:
+        print(f"[NETRA ENGINE] Failed to upload to Google Drive: {e}")
+        return None, None
+
+def process_sos_confirmation(raw_frame):
+    """Handle SOS confirmation: capture frame, generate report, upload to Drive."""
+    # Save raw frame as fixed name for SOS incident
+    temp_dir = tempfile.gettempdir()
+    frame_path = os.path.join(temp_dir, "sos_incident_snapshot.jpg")
+    try:
+        cv2.imwrite(frame_path, raw_frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
+    except Exception as e:
+        print(f"[NETRA ENGINE] Failed to capture frame: {e}")
+        return
+
+    # Generate forensic report
+    report = generate_forensic_report(frame_path)
+    if not report:
+        print("[NETRA ENGINE] SOS confirmation: Failed to generate forensic report.")
+        # Still upload the image even if report fails?
+        # We'll upload the image with a placeholder report
+        report = {
+            "threat_level": "UNKNOWN",
+            "description": "Failed to generate report via Gemini Vision.",
+            "timestamp": datetime.now().isoformat()
+        }
+
+    global latest_forensic_report
+    latest_forensic_report = report
+
+    # Upload to Drive
+    image_link, report_link = upload_to_drive(frame_path, report)
+    if image_link:
+        print(f"[NETRA ENGINE] SOS confirmation: Image uploaded to Drive: {image_link}")
+    else:
+        print("[NETRA ENGINE] SOS confirmation: Failed to upload image to Drive.")
+
+    if report_link:
+        print(f"[NETRA ENGINE] SOS confirmation: Report uploaded to Drive: {report_link}")
+    else:
+        print("[NETRA ENGINE] SOS confirmation: Failed to upload report to Drive.")
+
+    # Clean up the temporary frame file
+    try:
+        if frame_path and os.path.exists(frame_path):
+            os.unlink(frame_path)
+    except Exception as e:
+        print(f"[NETRA ENGINE] Failed to delete temporary frame file: {e}")
+
+# ==========================================
+# 6. COCO-17 KEYPOINT SKELETON
+# ==========================================
+SKELETON = [
+    (5, 6), (5, 7), (7, 9), (6, 8), (8, 10),          # shoulders/arms
+    (5, 11), (6, 12), (11, 12),                        # torso
+    (11, 13), (13, 15), (12, 14), (14, 16),            # legs
+    (0, 5), (0, 6),                                     # neck-ish
+    (0, 1), (0, 2), (1, 3), (2, 4),                     # face
+]
+
+# ==========================================
+# 7. CORE AI PROCESSING THREAD
 # ==========================================
 def ai_processing_loop():
     global output_frame, raw_output_frame, output_lock, raw_lock
@@ -159,6 +363,8 @@ def ai_processing_loop():
     last_gesture_time = 0
     fps_log_time = 0
     frame_count_since_log = 0
+    last_sos_processed_time = 0  # To avoid processing the same SOS event multiple times
+    SOS_PROCESS_COOLDOWN = 10.0  # Seconds to wait before processing another SOS event
 
     while True:
         try:
@@ -263,10 +469,16 @@ def ai_processing_loop():
                 cv2.putText(frame, f"PERSONS: {count} | SOS: {'ACTIVE' if sos_triggered else 'NORMAL'}",
                             (15, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.7, banner_color, 2)
 
-                # Send Backend Alert
+                # Send Backend Alert (for frontend updates)
                 if (current_time - last_alert_time > ALERT_COOLDOWN_SEC) or sos_triggered:
                     threading.Thread(target=send_status_to_backend, args=(count, sos_triggered, True), daemon=True).start()
                     last_alert_time = current_time
+
+                # Process SOS confirmation for forensic report and Drive upload
+                if sos_triggered and (current_time - last_sos_processed_time > SOS_PROCESS_COOLDOWN):
+                    # Process in a separate thread to avoid blocking the video loop
+                    threading.Thread(target=process_sos_confirmation, args=(frame.copy()), daemon=True).start()
+                    last_sos_processed_time = current_time
 
                 with output_lock:
                     output_frame = frame.copy()
@@ -275,7 +487,7 @@ def ai_processing_loop():
             time.sleep(0.05)
 
 # ==========================================
-# 3. VIDEO STREAMING ENDPOINTS (MJPEG)
+# 8. VIDEO STREAMING ENDPOINTS (MJPEG)
 # ==========================================
 def generate_mjpeg_stream():
     global output_frame, output_lock
@@ -326,9 +538,28 @@ def generate_raw_mjpeg_stream():
 def raw_video_feed():
     return StreamingResponse(generate_raw_mjpeg_stream(), media_type="multipart/x-mixed-replace; boundary=frame")
 
+@app.post("/set-gemini-key")
+async def set_gemini_key(payload: dict):
+    global client
+    api_key = payload.get("api_key")
+    if api_key:
+        client = genai.Client(api_key=api_key)
+        print("[NETRA ENGINE] Gemini API key updated via endpoint.")
+        return {"status": "success"}
+    else:
+        return {"status": "error", "message": "API key missing"}, 400
+
+@app.get("/latest-forensic-report")
+async def get_latest_forensic_report():
+    global latest_forensic_report
+    if latest_forensic_report:
+        return latest_forensic_report
+    else:
+        return {"status": "no report yet"}
+
 
 # ==========================================
-# 4. SERVER STARTUP
+# 9. SERVER STARTUP
 # ==========================================
 if __name__ == "__main__":
     ai_thread = threading.Thread(target=ai_processing_loop, daemon=True)
