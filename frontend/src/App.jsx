@@ -10,8 +10,8 @@ function App() {
   // API
   // =========================================================
 
-  const BACKEND_BASE = "http://127.0.0.1:8000";
-  const AI_ENGINE_BASE = "http://127.0.0.1:8001";
+  const BACKEND_BASE = import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:8000";
+  const AI_ENGINE_BASE = import.meta.env.VITE_ENGINE_URL || "http://127.0.0.1:8001";
 
   const API_URL = `${BACKEND_BASE}/api/ai-stream`;
   // FIX: this version was missing the camera-config sync endpoint entirely -
