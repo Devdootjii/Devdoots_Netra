@@ -17,7 +17,7 @@ function NetraChatbot() {
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
 
-  const BACKEND_CHAT_URL = "http://127.0.0.1:8000/api/chat";
+  const BACKEND_CHAT_URL = `${import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:8000"}/api/chat`;
 
   // Auto-scroll to bottom when new messages arrive.
   useEffect(() => {

@@ -255,3 +255,8 @@ Demo se 15 min pehle ye karo:
 | `frontend/.env.example` | `frontend/` folder mein | Frontend env var template |
 | `frontend/vercel.json` | `frontend/` folder mein | Vercel deploy config |
 | `render.yaml` | Project root | Render deploy config |
+
+
+https://devdoots-netra-backend-7hoi.onrender.com/
+
+https://devdoots-netra-jut.vercel.app/
