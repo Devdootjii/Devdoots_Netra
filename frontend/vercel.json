@@ -1,0 +1,17 @@
+# Vercel config for NETRA Frontend
+# Ye file frontend/ folder mein rakhi jayegi
+# Vercel GitHub repo connect karega aur ye config automatically use hoga
+
+[build]
+  command = "npm run build"
+  output = "dist"
+
+[env]
+  # Ye values Vercel dashboard se set karna padenge:
+  # Settings > Environment Variables
+  # VITE_BACKEND_URL = https://netra-backend.onrender.com
+  # VITE_ENGINE_URL = https://netra-engine-tunnel.trycloudflare.com
+
+[redirects]
+  # SPA routing — saare routes index.html pe redirect
+  { from = "/*", to = "/index.html", status = 200 }

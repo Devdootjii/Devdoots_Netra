@@ -1,0 +1,32 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.env
+*.log
+
+# ---- Runtime artifacts (engine + backend write these) ----
+.runtime/
+alert_latency_log.txt
+
+# ---- Model weights (large; fetch on demand) ----
+# Keep yolov8n-pose.pt out of git if you prefer — uncomment the line below.
+# models/*.pt
+
+# ---- Node / frontend ----
+frontend/node_modules/
+frontend/.vite/
+frontend/dist/
+
+# ---- Credentials (NEVER commit) ----
+credentials.json
+*.pem
+service-account*.json
+
+# ---- OS / editor ----
+.DS_Store
+.vscode/
+.idea/

@@ -1,0 +1,58 @@
+# ==========================================
+# NETRA — Docker Compose (Local Testing)
+# ==========================================
+# Ye file PROJECT ROOT mein rakhi jayegi
+# Run: docker compose up --build
+# 
+# Ye teeno services ek saath start karta hai:
+#   1. Backend   (port 8000)
+#   2. Engine    (port 8001 — webcam access ke saath)
+#   3. Frontend  (port 5173 — hot reload)
+#
+# IMPORTANT: Engine ko webcam chahiye. Linux pe /dev/video0,
+# Windows pe Docker webcam support limited hai. Agar webcam na kaam kare
+# toh engine ko Docker ke bina chalao: python engine/netra_engine.py
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    restart: unless-stopped
+
+  engine:
+    build:
+      context: ./engine
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    devices:
+      - /dev/video0:/dev/video0
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
+      - BACKEND_API_URL=http://backend:8000/api/ai-stream
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./credentials.json:/app/credentials.json:ro
+      - ./models:/app/models:ro
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  frontend:
+    image: node:20-slim
+    working_dir: /app
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev -- --host"
+    depends_on:
+      - backend
+      - engine

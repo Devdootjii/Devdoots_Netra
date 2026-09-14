@@ -1,0 +1,24 @@
+# NETRA — Python dependencies (CPU-only, no GPU needed)
+
+# Core vision + server
+ultralytics==8.4.120
+opencv-python==5.0.0.93
+numpy==2.5.2
+fastapi==0.141.1
+uvicorn==0.52.3
+python-dotenv==1.2.3
+requests==2.34.2
+pillow==12.3.0
+
+# Pose / inference backend — CPU-only (unpinned, pip will resolve)
+torch
+torchvision
+
+# Gemini Vision forensic reports + chatbot
+google-genai
+
+# Google Drive evidence archiving
+google-api-python-client
+google-auth
+google-auth-httplib2
+google-auth-oauthlib

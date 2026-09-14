@@ -1,0 +1,16 @@
+# Render config — Backend deployment ke liye
+# Ye file project ROOT mein rakhi jayegi
+# Render dashboard se "Connect a repository" karo, ye config auto-detect hoga
+
+services:
+  - type: web
+    name: netra-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false  # Render dashboard se manually set karna padega
+      - key: PYTHON_VERSION
+        value: "3.12"
